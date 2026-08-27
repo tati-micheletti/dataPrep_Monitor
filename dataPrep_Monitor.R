@@ -1,23 +1,24 @@
-## Everything in this file and any files in the R directory are sourced during `simInit()`;
-## all functions and objects are put into the `simList`.
-## To use objects, use `sim$xxx` (they are globally available to all modules).
-## Functions can be used inside any function that was sourced in this module;
-## they are namespaced to the module, just like functions in R packages.
-## If exact location is required, functions will be: `sim$.mods$<moduleName>$FunctionName`.
 defineModule(sim, list(
   name = "dataPrep_Monitor",
-  description = "",
-  keywords = "",
-  authors = structure(list(list(given = c("First", "Middle"), family = "Last", role = c("aut", "cre"), email = "email@example.com", comment = NULL)), class = "person"),
+  description = paste("Downloads and prepares all input data for the bird monitor pipeline:",
+                       "climate (CHELSA bioclim), DEM (Copernicus GLO-30), land use",
+                       "(CTM/HCTM crop type maps), and occurrence data (EBBA2 and German",
+                       "MhB/DDA point counts and territories)."),
+  keywords = c("bird monitor", "data preparation", "bioclim", "DEM", "land use", "occurrence"),
+  authors = structure(list(list(given = "Tati", family = "Micheletti", role = c("aut", "cre"),
+                                 email = "tati.micheletti@gmail.com", comment = NULL),
+                           list(given = "Lisa", family = "Hildebrand", role = "aut",
+                                email = "lisa.hildebrand@ufz.de", comment = NULL)), class = "person"),
   childModules = character(0),
   version = list(dataPrep_Monitor = "0.0.0.9000"),
   timeframe = as.POSIXlt(c(NA, NA)),
   timeunit = "year",
   citation = list("citation.bib"),
   documentation = list("NEWS.md", "README.md", "dataPrep_Monitor.Rmd"),
-  reqdPkgs = list("PredictiveEcology/SpaDES.core@development (>= 3.2.0)", "ggplot2"),
+  reqdPkgs = list("PredictiveEcology/SpaDES.core@development (>= 3.2.0)",
+                   "terra", "dismo", "raster", "spatialEco",
+                   "sf", "dplyr", "tidyr", "purrr", "readxl", "reticulate"),
   parameters = bindrows(
-    #defineParameter("paramName", "paramClass", value, min, max, "parameter description"),
     defineParameter(".plots", "character", "screen", NA, NA,
                     "Used by Plots function, which can be optionally used here"),
     defineParameter(".plotInitialTime", "numeric", start(sim), NA, NA,
@@ -35,29 +36,109 @@ defineModule(sim, list(
     defineParameter(".seed", "list", list(), NA, NA,
                     "Named list of seeds to use for each event (names)."),
     defineParameter(".useCache", "logical", FALSE, NA, NA,
-                    "Should caching of events or module be used?")
-    ## Opt-in: pin a fixed cacheId per event so a pre-seeded Google Drive folder
-    ## can short-circuit a deterministic event to a download. To enable,
-    ## uncomment the block below (the leading `,` is valid R as a continuation),
-    ## edit the cacheId/cloudFolderID, and set `.useCache` above to include the
-    ## relevant event name(s), e.g. `c("init")`.
-    # ,defineParameter(".useCacheArgs", "list",
-    #                  list(init = list(cacheId       = "_v1.0",
-    #                                   useCloud      = TRUE,
-    #                                   cloudFolderID = "<google-drive-folder-id>")),
-    #                  NA, NA,
-    #                  paste("Optional named list, keyed by event name, of extra arguments",
-    #                        "passed to reproducible::Cache() for that event. Useful for",
-    #                        "pinning a fixed cacheId so a pre-seeded cloud folder can",
-    #                        "short-circuit a deterministic event."))
+                    "Should caching of events or module be used?"),
+
+    ## Spatial / temporal -------------------------------------------------------
+    defineParameter("targetCRS", "character", "EPSG:3035", NA, NA,
+                    "Output CRS for all prepared rasters (ETRS89-LAEA)."),
+    defineParameter("europeBbox", "numeric", c(72, -25, 34, 45), NA, NA,
+                    "European bounding box in WGS84 as c(N, W, S, E). Used for both",
+                    "the climate window and the DEM download extent."),
+    defineParameter("climateResolutionM", "numeric", 50000, NA, NA,
+                    "Output resolution (m) for the climate (bioclim) rasters."),
+    defineParameter("habitatResolutionM", "numeric", 200, NA, NA,
+                    "Output resolution (m) for habitat-scale rasters."),
+    defineParameter("landscapeResolutionM", "numeric", 1000, NA, NA,
+                    "Output resolution (m) for landscape-scale rasters."),
+
+    ## Climate --------------------------------------------------------------------
+    defineParameter("climateTargetYears", "numeric", 2005:2025, NA, NA,
+                    "Target years to compute rolling-window bioclim climatologies for."),
+    defineParameter("climateWindowLength", "numeric", 6, NA, NA,
+                    "Number of years in the rolling window (Y-5 to Y) used to compute",
+                    "each target year's bioclim climatology."),
+    defineParameter("ebba2TrainingYear", "numeric", 2017, NA, NA,
+                    "Target year whose bioclim window (e.g. 2012-2017) is used to train",
+                    "the European EBBA2 climate SDM."),
+
+    ## Land use / land cover years -------------------------------------------------
+    defineParameter("landuseYears", "numeric", 2005:2025, NA, NA,
+                    "Years to process land use (crop type) maps for."),
+    defineParameter("habitatYears", "numeric", 2022:2025, NA, NA,
+                    "Years to prepare German habitat-scale (200m) occurrence data for."),
+    defineParameter("landscapeYears", "numeric", 2005:2025, NA, NA,
+                    "Years to prepare German landscape-scale (1km) occurrence data for."),
+
+    ## Species / locale -------------------------------------------------------------
+    defineParameter("species", "character",
+                    c("Vanellus vanellus", "Milvus milvus", "Lanius collurio",
+                      "Lullula arborea", "Alauda arvensis", "Saxicola rubetra",
+                      "Emberiza calandra", "Emberiza citrinella", "Buteo buteo",
+                      "Sturnus vulgaris", "Perdix perdix"), NA, NA,
+                    "Latin names of focal species to prepare occurrence data for."),
+    defineParameter("localeCtype", "character", "de_DE.UTF-8", NA, NA,
+                    "Locale used for correct handling of German special characters."),
+
+    ## Raw external data locations (relative to dataPath(sim)) ----------------------
+    ## These raw datasets cannot be downloaded programmatically and must be
+    ## supplied by the user at these locations before prepareOccurrenceData runs.
+    defineParameter("ebba2CSVSubpath", "character",
+                    "raw/ebba2/ebba2_data_occurrence_50km.csv", NA, NA,
+                    "Path (relative to dataPath(sim)) to the EBBA2 occurrence CSV."),
+    defineParameter("ebba2ShpSubpath", "character",
+                    "raw/ebba2/ebba2_grid50x50_v1.shp", NA, NA,
+                    "Path (relative to dataPath(sim)) to the EBBA2 grid shapefile."),
+    defineParameter("mhbObsSubpath", "character",
+                    "raw/dda/dbird_observations_CBBM.csv", NA, NA,
+                    "Path (relative to dataPath(sim)) to the raw MhB point count CSV."),
+    defineParameter("probeflaechenShpSubpath", "character",
+                    "raw/dda/MhB_Probeflaechen_DE_S2637_epsg25832.shp", NA, NA,
+                    "Path (relative to dataPath(sim)) to the Probeflaechen shapefile."),
+    defineParameter("ddaTerritoriesXlsxSubpath", "character",
+                    "raw/dda/BirdStats_Daten2005-2024D_alle.xlsx", NA, NA,
+                    "Path (relative to dataPath(sim)) to the DDA territories xlsx."),
+    defineParameter("ddaVisitsXlsxSubpath", "character",
+                    "raw/dda/BirdStats_Visits2005-2024D.xlsx", NA, NA,
+                    "Path (relative to dataPath(sim)) to the DDA visited-routes xlsx."),
+
+    ## CORINE Land Cover (CLMS API) ----------------------------------------------------
+    defineParameter("clmsTokenJSONPath", "character", "clms_token.json", NA, NA,
+                    "Path to your personal CLMS API token JSON file",
+                    "(client_id/private_key/user_id/token_uri). Either absolute (recommended --",
+                    "e.g. somewhere in your home directory, well outside any git-tracked project,",
+                    "since this file holds a private key), or relative to dataPath(sim). You must",
+                    "create this file yourself at https://land.copernicus.eu -- see",
+                    "python/download_landcover.py for exact setup steps. Never commit this file."),
+
+    ## Rerun control ------------------------------------------------------------------
+    defineParameter("rerunClimateData", "logical", FALSE, NA, NA,
+                    "Should prepareClimateData be re-run even if sim$bioclimPaths exists?"),
+    defineParameter("rerunDEM", "logical", FALSE, NA, NA,
+                    "Should prepareDEM be re-run even if sim$demPaths exists?"),
+    defineParameter("rerunLanduse", "logical", FALSE, NA, NA,
+                    "Should prepareLanduse be re-run even if sim$landusePaths exists?"),
+    defineParameter("rerunLandcover", "logical", FALSE, NA, NA,
+                    "Should prepareLandcover be re-run even if sim$landcoverPaths exists?"),
+    defineParameter("rerunOccurrenceData", "logical", FALSE, NA, NA,
+                    "Should prepareOccurrenceData be re-run even if sim$occurrenceData exists?")
   ),
   inputObjects = bindrows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
-    expectsInput(objectName = NA, objectClass = NA, desc = NA, sourceURL = NA)
   ),
   outputObjects = bindrows(
-    #createsOutput("objectName", "objectClass", "output object description", ...),
-    createsOutput(objectName = NA, objectClass = NA, desc = NA)
+    createsOutput("bioclimPaths", "list",
+                  "Named list of bioclim raster paths, one per climate target year."),
+    createsOutput("demPaths", "list",
+                  "Named list of DEM derivative raster paths (elevation/slope/solar",
+                  "radiation) per scale."),
+    createsOutput("landusePaths", "list",
+                  "Named list of land use raster paths (habitat/landscape) per year."),
+    createsOutput("landcoverPaths", "list",
+                  "Named list of land cover raster paths (habitat/landscape) per CORINE",
+                  "snapshot year (2006/2012/2018)."),
+    createsOutput("occurrenceData", "list",
+                  "List with europe/gerHabitat/gerLandscape vectors of per-species(-year)",
+                  "occurrence RDS paths.")
   )
 ))
 
@@ -65,123 +146,110 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
   switch(
     eventType,
     init = {
-      ### check for more detailed object dependencies:
-      ### (use `checkObject` or similar)
-
-      # do stuff for this event
-      sim <- Init(sim)
-
-      # schedule future event(s)
-      sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "dataPrep_Monitor", "plot")
-      sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "dataPrep_Monitor", "save")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareClimateData")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDEM")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLanduse")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLandcover")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
     },
-    plot = {
+
+    prepareClimateData = {
       # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      plotFun(sim) # example of a plotting function
-      # schedule future event(s)
-
-      # e.g.,
-      #sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "dataPrep_Monitor", "plot")
-
+      if (is.null(sim$bioclimPaths) || P(sim)$rerunClimateData) {
+        sim$bioclimPaths <- prepareClimateData(
+          climateTargetYears = P(sim)$climateTargetYears,
+          climateWindowLength = P(sim)$climateWindowLength,
+          europeBboxVec = P(sim)$europeBbox,
+          targetCRS = P(sim)$targetCRS,
+          climateResolutionM = P(sim)$climateResolutionM,
+          chelsaMonthlyDir = file.path(dataPath(sim), "processed", "chelsa_monthly", "europe"),
+          climateOutputDir = file.path(outputPath(sim), "climate"))
+      }
       # ! ----- STOP EDITING ----- ! #
     },
-    save = {
+
+    prepareDEM = {
       # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      # e.g., call your custom functions/methods here
-      # you can define your own methods below this `doEvent` function
-
-      # schedule future event(s)
-
-      # e.g.,
-      # sim <- scheduleEvent(sim, time(sim) + P(sim)$.saveInterval, "dataPrep_Monitor", "save")
-
+      if (is.null(sim$demPaths) || P(sim)$rerunDEM) {
+        sim$demPaths <- prepareDEM(
+          demRawDir = file.path(dataPath(sim), "raw", "dem"),
+          processedDir = file.path(dataPath(sim), "processed"),
+          habitatOutputDir = file.path(outputPath(sim), "habitat"),
+          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          bboxVec = P(sim)$europeBbox,
+          targetCRS = P(sim)$targetCRS,
+          habitatResolutionM = P(sim)$habitatResolutionM,
+          landscapeResolutionM = P(sim)$landscapeResolutionM,
+          pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_dem.py"),
+          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"))
+      }
       # ! ----- STOP EDITING ----- ! #
     },
-    event1 = {
+
+    prepareLanduse = {
       # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      # e.g., call your custom functions/methods here
-      # you can define your own methods below this `doEvent` function
-
-      # schedule future event(s)
-
-      # e.g.,
-      # sim <- scheduleEvent(sim, time(sim) + increment, "dataPrep_Monitor", "templateEvent")
-
+      if (is.null(sim$landusePaths) || P(sim)$rerunLanduse) {
+        sim$landusePaths <- prepareLanduse(
+          landuseRawDir = file.path(dataPath(sim), "raw", "landuse"),
+          habitatOutputDir = file.path(outputPath(sim), "habitat"),
+          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          landuseYears = P(sim)$landuseYears,
+          targetCRS = P(sim)$targetCRS,
+          habitatResolutionM = P(sim)$habitatResolutionM,
+          landscapeResolutionM = P(sim)$landscapeResolutionM,
+          pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landuse.py"),
+          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"))
+      }
       # ! ----- STOP EDITING ----- ! #
     },
-    event2 = {
+
+    prepareLandcover = {
       # ! ----- EDIT BELOW ----- ! #
-      # do stuff for this event
-
-      # e.g., call your custom functions/methods here
-      # you can define your own methods below this `doEvent` function
-
-      # schedule future event(s)
-
-      # e.g.,
-      # sim <- scheduleEvent(sim, time(sim) + increment, "dataPrep_Monitor", "templateEvent")
-
+      if (is.null(sim$landcoverPaths) || P(sim)$rerunLandcover) {
+        sim$landcoverPaths <- prepareLandcover(
+          landcoverRawDir = file.path(dataPath(sim), "raw", "landcover"),
+          habitatOutputDir = file.path(outputPath(sim), "habitat"),
+          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          bboxVec = P(sim)$europeBbox,
+          tokenJSONPath = resolvePath(dataPath(sim), P(sim)$clmsTokenJSONPath),
+          targetCRS = P(sim)$targetCRS,
+          habitatResolutionM = P(sim)$habitatResolutionM,
+          landscapeResolutionM = P(sim)$landscapeResolutionM,
+          pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landcover.py"),
+          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"))
+      }
       # ! ----- STOP EDITING ----- ! #
     },
+
+    prepareOccurrenceData = {
+      # ! ----- EDIT BELOW ----- ! #
+      if (is.null(sim$occurrenceData) || P(sim)$rerunOccurrenceData) {
+        windowStart <- P(sim)$ebba2TrainingYear - (P(sim)$climateWindowLength - 1)
+        bioclimTrainingFile <- file.path(outputPath(sim), "climate",
+                                          paste0("bioclim_", windowStart, "-",
+                                                 P(sim)$ebba2TrainingYear, ".tif"))
+
+        sim$occurrenceData <- prepareOccurrenceData(
+          ebba2CSVPath = file.path(dataPath(sim), P(sim)$ebba2CSVSubpath),
+          ebba2ShpPath = file.path(dataPath(sim), P(sim)$ebba2ShpSubpath),
+          bioclimFile = bioclimTrainingFile,
+          mhbObsPath = file.path(dataPath(sim), P(sim)$mhbObsSubpath),
+          ddaTerritoriesXlsxPath = file.path(dataPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
+          ddaVisitsXlsxPath = file.path(dataPath(sim), P(sim)$ddaVisitsXlsxSubpath),
+          probeflaechenShpPath = file.path(dataPath(sim), P(sim)$probeflaechenShpSubpath),
+          habitatOutputDir = file.path(outputPath(sim), "habitat"),
+          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          occurrenceOutputDir = file.path(outputPath(sim), "occurrence"),
+          species = P(sim)$species,
+          habitatYears = P(sim)$habitatYears,
+          landscapeYears = P(sim)$landscapeYears,
+          localeCtype = P(sim)$localeCtype)
+      }
+      # ! ----- STOP EDITING ----- ! #
+    },
+
     warning(noEventWarning(sim))
   )
-  return(invisible(sim))
-}
-
-### template initialization
-Init <- function(sim) {
-  # # ! ----- EDIT BELOW ----- ! #
-
-  # ! ----- STOP EDITING ----- ! #
-
-  return(invisible(sim))
-}
-### template for save events
-Save <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # do stuff for this event
-  sim <- saveFiles(sim)
-
-  # ! ----- STOP EDITING ----- ! #
-  return(invisible(sim))
-}
-
-### template for plot events
-plotFun <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # do stuff for this event
-  sampleData <- data.frame("TheSample" = sample(1:10, replace = TRUE))
-  Plots(sampleData, fn = ggplotFn) # needs ggplot2
-
-  # ! ----- STOP EDITING ----- ! #
-  return(invisible(sim))
-}
-
-### template for your event1
-Event1 <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # THE NEXT TWO LINES ARE FOR DUMMY UNIT TESTS; CHANGE OR DELETE THEM.
-  # sim$event1Test1 <- " this is test for event 1. " # for dummy unit test
-  # sim$event1Test2 <- 999 # for dummy unit test
-
-  # ! ----- STOP EDITING ----- ! #
-  return(invisible(sim))
-}
-
-### template for your event2
-Event2 <- function(sim) {
-  # ! ----- EDIT BELOW ----- ! #
-  # THE NEXT TWO LINES ARE FOR DUMMY UNIT TESTS; CHANGE OR DELETE THEM.
-  # sim$event2Test1 <- " this is test for event 2. " # for dummy unit test
-  # sim$event2Test2 <- 777  # for dummy unit test
-
-  # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
 }
 
@@ -193,12 +261,6 @@ Event2 <- function(sim) {
   # downloadData("LCC2005", modulePath(sim)).
   # Nothing should be created here that does not create a named object in inputObjects.
   # Any other initiation procedures should be put in "init" eventType of the doEvent function.
-  # Note: the module developer can check if an object is 'suppliedElsewhere' to
-  # selectively skip unnecessary steps because the user has provided those inputObjects in the
-  # simInit call, or another module will supply or has supplied it. e.g.,
-  # if (!suppliedElsewhere('defaultColor', sim)) {
-  #   sim$map <- Cache(prepInputs, extractURL('map')) # download, extract, load file from url in sourceURL
-  # }
 
   #cacheTags <- c(currentModule(sim), "function:.inputObjects") ## uncomment this if Cache is being used
   dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
@@ -209,9 +271,3 @@ Event2 <- function(sim) {
   # ! ----- STOP EDITING ----- ! #
   return(invisible(sim))
 }
-
-ggplotFn <- function(data, ...) {
-  ggplot2::ggplot(data, ggplot2::aes(TheSample)) +
-    ggplot2::geom_histogram(...)
-}
-

@@ -1,0 +1,14 @@
+# Never commit credentials -- CLMS API tokens contain a private key.
+# clmsTokenJSONPath should point outside this repo entirely (e.g. your
+# home directory); these patterns are defense-in-depth in case a token
+# ever ends up inside the module folder by mistake.
+token/
+tokens/
+*token*.json
+*token*.txt
+clms_token*
+
+# Python virtualenv / bytecode from the auto-provisioned reticulate env
+__pycache__/
+*.pyc
+.venv/
