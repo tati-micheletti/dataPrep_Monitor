@@ -58,7 +58,7 @@ def download_if_missing(url, target_path, expected_size_bytes=None):
           + (f" ({expected_size_bytes / 1e6:.1f} MB)..."
              if expected_size_bytes else "..."))
 
-    with requests.get(url, stream=True) as r:
+    with requests.get(url, stream=True, timeout=60) as r:
         r.raise_for_status()
         downloaded = 0
         with open(target_path, "wb") as f:
@@ -77,7 +77,7 @@ def download_if_missing(url, target_path, expected_size_bytes=None):
 def fetch_zenodo_files(record_id):
     """Fetch file list from Zenodo API for a given record ID."""
     url = f"https://zenodo.org/api/records/{record_id}"
-    response = requests.get(url)
+    response = requests.get(url, timeout=30)
     response.raise_for_status()
     return response.json()["files"]
 

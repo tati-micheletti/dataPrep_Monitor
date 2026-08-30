@@ -14,9 +14,13 @@
 #' @param outputDir Character. Directory to save per-species RDS files in.
 #' @param species Character vector of Latin species names to process.
 #' @param thinDist Numeric. Spatial thinning distance in metres.
+#' @param useThinning Logical. Should occurrence points be spatially thinned?
+#'   Does NOT restore abundance data when FALSE -- EBBA2 is a presence/absence
+#'   atlas regardless of thinning.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
-                                  outputDir, species, thinDist = 100000) {
+                                  outputDir, species, thinDist = 100000,
+                                  useThinning = TRUE) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
 
@@ -116,18 +120,23 @@ occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
             " (", sum(spPaEnv$occurrence == 1), " pres / ",
             sum(spPaEnv$occurrence == 0), " abs)")
 
-    message("    Spatial thinning at ", thinDist / 1000, "km...")
-    spSf <- sf::st_as_sf(spPaEnv, coords = c("x", "y"), crs = terra::crs(bioclim))
+    if (useThinning) {
+      message("    Spatial thinning at ", thinDist / 1000, "km...")
+      spSf <- sf::st_as_sf(spPaEnv, coords = c("x", "y"), crs = terra::crs(bioclim))
 
-    spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
-    thinnedCoords <- sf::st_coordinates(spThinned)
-    spThinnedDf <- sf::st_drop_geometry(spThinned)
-    spThinnedDf$x <- thinnedCoords[, 1]
-    spThinnedDf$y <- thinnedCoords[, 2]
+      spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
+      thinnedCoords <- sf::st_coordinates(spThinned)
+      spThinnedDf <- sf::st_drop_geometry(spThinned)
+      spThinnedDf$x <- thinnedCoords[, 1]
+      spThinnedDf$y <- thinnedCoords[, 2]
 
-    message("    After thinning: ", nrow(spThinnedDf),
-            " (", sum(spThinnedDf$occurrence == 1), " pres / ",
-            sum(spThinnedDf$occurrence == 0), " abs)")
+      message("    After thinning: ", nrow(spThinnedDf),
+              " (", sum(spThinnedDf$occurrence == 1), " pres / ",
+              sum(spThinnedDf$occurrence == 0), " abs)")
+    } else {
+      message("    Spatial thinning disabled -- keeping all ", nrow(spPaEnv), " rows")
+      spThinnedDf <- spPaEnv
+    }
 
     saveRDS(spThinnedDf, outFile)
     message("    Saved -> ", outFile)

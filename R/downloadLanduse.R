@@ -21,7 +21,7 @@ downloadLanduse <- function(landuseRawDir, pythonScriptPath, requirementsPath,
 
   dir.create(landuseRawDir, recursive = TRUE, showWarnings = FALSE)
 
-  Sys.setenv(LANDUSE_OUT_DIR = landuseRawDir)
+  setPyEnv(list(LANDUSE_OUT_DIR = landuseRawDir))
 
   message("Downloading land use maps to ", landuseRawDir, "...")
   reticulate::py_run_file(pythonScriptPath)

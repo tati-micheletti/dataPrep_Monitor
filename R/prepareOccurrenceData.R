@@ -20,6 +20,10 @@
 #' @param habitatYears Integer vector of years for the habitat SDM.
 #' @param landscapeYears Integer vector of years for the landscape SDM.
 #' @param localeCtype Character. Locale for German special characters.
+#' @param useThinning Logical. Should occurrence points be spatially thinned
+#'   (following Wiedenroth et al.) at all three scales? Does NOT restore
+#'   abundance data when FALSE -- occurrence is already binarized to
+#'   presence/absence upstream of thinning in each function.
 #' @return Invisibly, a list with `europe`, `gerHabitat`, and
 #'   `gerLandscape` output file path vectors.
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
@@ -27,14 +31,16 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    ddaVisitsXlsxPath, probeflaechenShpPath,
                                    habitatOutputDir, landscapeOutputDir,
                                    occurrenceOutputDir, species, habitatYears,
-                                   landscapeYears, localeCtype = "de_DE.UTF-8") {
+                                   landscapeYears, localeCtype = "de_DE.UTF-8",
+                                   useThinning = TRUE) {
 
   europeFiles <- occurrencePrepEurope(
     ebba2CSVPath = ebba2CSVPath,
     ebba2ShpPath = ebba2ShpPath,
     bioclimFile = bioclimFile,
     outputDir = file.path(occurrenceOutputDir, "europe"),
-    species = species)
+    species = species,
+    useThinning = useThinning)
 
   gerHabitatFiles <- occurrencePrepGerHabitat(
     mhbObsPath = mhbObsPath,
@@ -43,7 +49,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     outputDir = file.path(occurrenceOutputDir, "habitat"),
     species = species,
     habitatYears = habitatYears,
-    localeCtype = localeCtype)
+    localeCtype = localeCtype,
+    useThinning = useThinning)
 
   gerLandscapeFiles <- occurrencePrepGerLandscape(
     ddaTerritoriesXlsxPath = ddaTerritoriesXlsxPath,
@@ -54,7 +61,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     outputDir = file.path(occurrenceOutputDir, "landscape"),
     species = species,
     landscapeYears = landscapeYears,
-    localeCtype = localeCtype)
+    localeCtype = localeCtype,
+    useThinning = useThinning)
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,

@@ -31,12 +31,12 @@ downloadLandcover <- function(landcoverRawDir, bboxVec, tokenJSONPath,
 
   dir.create(landcoverRawDir, recursive = TRUE, showWarnings = FALSE)
 
-  Sys.setenv(CLMS_TOKEN_JSON = tokenJSONPath,
-             LANDCOVER_OUT_DIR = landcoverRawDir,
-             LANDCOVER_BBOX_N = bboxVec[1],
-             LANDCOVER_BBOX_W = bboxVec[2],
-             LANDCOVER_BBOX_S = bboxVec[3],
-             LANDCOVER_BBOX_E = bboxVec[4])
+  setPyEnv(list(CLMS_TOKEN_JSON = tokenJSONPath,
+                LANDCOVER_OUT_DIR = landcoverRawDir,
+                LANDCOVER_BBOX_N = bboxVec[1],
+                LANDCOVER_BBOX_W = bboxVec[2],
+                LANDCOVER_BBOX_S = bboxVec[3],
+                LANDCOVER_BBOX_E = bboxVec[4]))
 
   message("Downloading CORINE Land Cover snapshots to ", landcoverRawDir, "...")
   reticulate::py_run_file(pythonScriptPath)

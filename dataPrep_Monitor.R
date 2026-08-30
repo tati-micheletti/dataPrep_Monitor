@@ -79,34 +79,34 @@ defineModule(sim, list(
     defineParameter("localeCtype", "character", "de_DE.UTF-8", NA, NA,
                     "Locale used for correct handling of German special characters."),
 
-    ## Raw external data locations (relative to dataPath(sim)) ----------------------
+    ## Raw external data locations (relative to outputPath(sim)) ----------------------
     ## These raw datasets cannot be downloaded programmatically and must be
     ## supplied by the user at these locations before prepareOccurrenceData runs.
     defineParameter("ebba2CSVSubpath", "character",
                     "raw/ebba2/ebba2_data_occurrence_50km.csv", NA, NA,
-                    "Path (relative to dataPath(sim)) to the EBBA2 occurrence CSV."),
+                    "Path (relative to outputPath(sim)) to the EBBA2 occurrence CSV."),
     defineParameter("ebba2ShpSubpath", "character",
                     "raw/ebba2/ebba2_grid50x50_v1.shp", NA, NA,
-                    "Path (relative to dataPath(sim)) to the EBBA2 grid shapefile."),
+                    "Path (relative to outputPath(sim)) to the EBBA2 grid shapefile."),
     defineParameter("mhbObsSubpath", "character",
                     "raw/dda/dbird_observations_CBBM.csv", NA, NA,
-                    "Path (relative to dataPath(sim)) to the raw MhB point count CSV."),
+                    "Path (relative to outputPath(sim)) to the raw MhB point count CSV."),
     defineParameter("probeflaechenShpSubpath", "character",
                     "raw/dda/MhB_Probeflaechen_DE_S2637_epsg25832.shp", NA, NA,
-                    "Path (relative to dataPath(sim)) to the Probeflaechen shapefile."),
+                    "Path (relative to outputPath(sim)) to the Probeflaechen shapefile."),
     defineParameter("ddaTerritoriesXlsxSubpath", "character",
                     "raw/dda/BirdStats_Daten2005-2024D_alle.xlsx", NA, NA,
-                    "Path (relative to dataPath(sim)) to the DDA territories xlsx."),
+                    "Path (relative to outputPath(sim)) to the DDA territories xlsx."),
     defineParameter("ddaVisitsXlsxSubpath", "character",
                     "raw/dda/BirdStats_Visits2005-2024D.xlsx", NA, NA,
-                    "Path (relative to dataPath(sim)) to the DDA visited-routes xlsx."),
+                    "Path (relative to outputPath(sim)) to the DDA visited-routes xlsx."),
 
     ## CORINE Land Cover (CLMS API) ----------------------------------------------------
     defineParameter("clmsTokenJSONPath", "character", "clms_token.json", NA, NA,
                     "Path to your personal CLMS API token JSON file",
                     "(client_id/private_key/user_id/token_uri). Either absolute (recommended --",
                     "e.g. somewhere in your home directory, well outside any git-tracked project,",
-                    "since this file holds a private key), or relative to dataPath(sim). You must",
+                    "since this file holds a private key), or relative to outputPath(sim). You must",
                     "create this file yourself at https://land.copernicus.eu -- see",
                     "python/download_landcover.py for exact setup steps. Never commit this file."),
 
@@ -120,7 +120,12 @@ defineModule(sim, list(
     defineParameter("rerunLandcover", "logical", FALSE, NA, NA,
                     "Should prepareLandcover be re-run even if sim$landcoverPaths exists?"),
     defineParameter("rerunOccurrenceData", "logical", FALSE, NA, NA,
-                    "Should prepareOccurrenceData be re-run even if sim$occurrenceData exists?")
+                    "Should prepareOccurrenceData be re-run even if sim$occurrenceData exists?"),
+    defineParameter("useSpatialThinning", "logical", TRUE, NA, NA,
+                    "Should occurrence points be spatially thinned (thin.R, following",
+                    "Wiedenroth et al.) before saving? Does NOT restore abundance data",
+                    "when FALSE -- occurrence is already binarized to presence/absence",
+                    "upstream of thinning in all three occurrencePrep* functions.")
   ),
   inputObjects = bindrows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
@@ -162,7 +167,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           europeBboxVec = P(sim)$europeBbox,
           targetCRS = P(sim)$targetCRS,
           climateResolutionM = P(sim)$climateResolutionM,
-          chelsaMonthlyDir = file.path(dataPath(sim), "processed", "chelsa_monthly", "europe"),
+          chelsaMonthlyDir = file.path(outputPath(sim), "processed", "chelsa_monthly", "europe"),
           climateOutputDir = file.path(outputPath(sim), "climate"))
       }
       # ! ----- STOP EDITING ----- ! #
@@ -172,8 +177,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$demPaths) || P(sim)$rerunDEM) {
         sim$demPaths <- prepareDEM(
-          demRawDir = file.path(dataPath(sim), "raw", "dem"),
-          processedDir = file.path(dataPath(sim), "processed"),
+          demRawDir = file.path(outputPath(sim), "raw", "dem"),
+          processedDir = file.path(outputPath(sim), "processed", "dem"),
           habitatOutputDir = file.path(outputPath(sim), "habitat"),
           landscapeOutputDir = file.path(outputPath(sim), "landscape"),
           bboxVec = P(sim)$europeBbox,
@@ -190,7 +195,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landusePaths) || P(sim)$rerunLanduse) {
         sim$landusePaths <- prepareLanduse(
-          landuseRawDir = file.path(dataPath(sim), "raw", "landuse"),
+          landuseRawDir = file.path(outputPath(sim), "raw", "landuse"),
           habitatOutputDir = file.path(outputPath(sim), "habitat"),
           landscapeOutputDir = file.path(outputPath(sim), "landscape"),
           landuseYears = P(sim)$landuseYears,
@@ -207,11 +212,11 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landcoverPaths) || P(sim)$rerunLandcover) {
         sim$landcoverPaths <- prepareLandcover(
-          landcoverRawDir = file.path(dataPath(sim), "raw", "landcover"),
+          landcoverRawDir = file.path(outputPath(sim), "raw", "landcover"),
           habitatOutputDir = file.path(outputPath(sim), "habitat"),
           landscapeOutputDir = file.path(outputPath(sim), "landscape"),
           bboxVec = P(sim)$europeBbox,
-          tokenJSONPath = resolvePath(dataPath(sim), P(sim)$clmsTokenJSONPath),
+          tokenJSONPath = resolvePath(outputPath(sim), P(sim)$clmsTokenJSONPath),
           targetCRS = P(sim)$targetCRS,
           habitatResolutionM = P(sim)$habitatResolutionM,
           landscapeResolutionM = P(sim)$landscapeResolutionM,
@@ -230,20 +235,21 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
                                                  P(sim)$ebba2TrainingYear, ".tif"))
 
         sim$occurrenceData <- prepareOccurrenceData(
-          ebba2CSVPath = file.path(dataPath(sim), P(sim)$ebba2CSVSubpath),
-          ebba2ShpPath = file.path(dataPath(sim), P(sim)$ebba2ShpSubpath),
+          ebba2CSVPath = file.path(outputPath(sim), P(sim)$ebba2CSVSubpath),
+          ebba2ShpPath = file.path(outputPath(sim), P(sim)$ebba2ShpSubpath),
           bioclimFile = bioclimTrainingFile,
-          mhbObsPath = file.path(dataPath(sim), P(sim)$mhbObsSubpath),
-          ddaTerritoriesXlsxPath = file.path(dataPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
-          ddaVisitsXlsxPath = file.path(dataPath(sim), P(sim)$ddaVisitsXlsxSubpath),
-          probeflaechenShpPath = file.path(dataPath(sim), P(sim)$probeflaechenShpSubpath),
+          mhbObsPath = file.path(outputPath(sim), P(sim)$mhbObsSubpath),
+          ddaTerritoriesXlsxPath = file.path(outputPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
+          ddaVisitsXlsxPath = file.path(outputPath(sim), P(sim)$ddaVisitsXlsxSubpath),
+          probeflaechenShpPath = file.path(outputPath(sim), P(sim)$probeflaechenShpSubpath),
           habitatOutputDir = file.path(outputPath(sim), "habitat"),
           landscapeOutputDir = file.path(outputPath(sim), "landscape"),
           occurrenceOutputDir = file.path(outputPath(sim), "occurrence"),
           species = P(sim)$species,
           habitatYears = P(sim)$habitatYears,
           landscapeYears = P(sim)$landscapeYears,
-          localeCtype = P(sim)$localeCtype)
+          localeCtype = P(sim)$localeCtype,
+          useThinning = P(sim)$useSpatialThinning)
       }
       # ! ----- STOP EDITING ----- ! #
     },
@@ -263,7 +269,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
   # Any other initiation procedures should be put in "init" eventType of the doEvent function.
 
   #cacheTags <- c(currentModule(sim), "function:.inputObjects") ## uncomment this if Cache is being used
-  dPath <- asPath(getOption("reproducible.destinationPath", dataPath(sim)), 1)
+  dPath <- asPath(getOption("reproducible.destinationPath", outputPath(sim)), 1)
   message(currentModule(sim), ": using dataPath '", dPath, "'.")
 
   # ! ----- EDIT BELOW ----- ! #

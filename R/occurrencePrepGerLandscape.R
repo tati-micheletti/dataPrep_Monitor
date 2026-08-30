@@ -23,12 +23,15 @@
 #' @param landscapeYears Integer vector of years to process.
 #' @param localeCtype Character. Locale for German special characters.
 #' @param thinDist Numeric. Spatial thinning distance in metres.
+#' @param useThinning Logical. Should occurrence points be spatially thinned?
+#'   Does NOT restore abundance data when FALSE -- `Reviere` (territory count)
+#'   is already binarized to `Reviere > 0` upstream of thinning.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath,
                                         probeflaechenShpPath, landscapeOutputDir,
                                         habitatOutputDir, outputDir, species,
                                         landscapeYears, localeCtype = "de_DE.UTF-8",
-                                        thinDist = 2000) {
+                                        thinDist = 2000, useThinning = TRUE) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
@@ -154,18 +157,23 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
         next
       }
 
-      message("  Thinning at ", thinDist / 1000, "km...")
-      spSf <- sf::st_as_sf(spYrEnv, coords = c("x", "y"), crs = 3035)
+      if (useThinning) {
+        message("  Thinning at ", thinDist / 1000, "km...")
+        spSf <- sf::st_as_sf(spYrEnv, coords = c("x", "y"), crs = 3035)
 
-      spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
-      thinnedCoords <- sf::st_coordinates(spThinned)
-      spThinnedDf <- sf::st_drop_geometry(spThinned)
-      spThinnedDf$x <- thinnedCoords[, 1]
-      spThinnedDf$y <- thinnedCoords[, 2]
+        spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
+        thinnedCoords <- sf::st_coordinates(spThinned)
+        spThinnedDf <- sf::st_drop_geometry(spThinned)
+        spThinnedDf$x <- thinnedCoords[, 1]
+        spThinnedDf$y <- thinnedCoords[, 2]
 
-      message("  After thinning: ", nrow(spThinnedDf),
-              " (", sum(spThinnedDf$occurrence == 1), " pres / ",
-              sum(spThinnedDf$occurrence == 0), " abs)")
+        message("  After thinning: ", nrow(spThinnedDf),
+                " (", sum(spThinnedDf$occurrence == 1), " pres / ",
+                sum(spThinnedDf$occurrence == 0), " abs)")
+      } else {
+        message("  Spatial thinning disabled -- keeping all ", nrow(spYrEnv), " rows")
+        spThinnedDf <- spYrEnv
+      }
 
       saveRDS(spThinnedDf, outFile)
       message("  Saved -> ", outFile)

@@ -21,11 +21,14 @@
 #' @param habitatYears Integer vector of years to process.
 #' @param localeCtype Character. Locale for German special characters.
 #' @param thinDist Numeric. Spatial thinning distance in metres.
+#' @param useThinning Logical. Should occurrence points be spatially thinned?
+#'   Does NOT restore abundance data when FALSE -- `TOTAL_COUNT` is already
+#'   discarded (deduplicated to one presence per cell) upstream of thinning.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       habitatOutputDir, outputDir, species,
                                       habitatYears, localeCtype = "de_DE.UTF-8",
-                                      thinDist = 400) {
+                                      thinDist = 400, useThinning = TRUE) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
@@ -164,18 +167,23 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
 
       message("Total PA: ", nrow(paDf), " (", nPres, " pres / ", nAbs, " abs)")
 
-      message("Spatial thinning at ", thinDist, "m...")
-      paSf <- sf::st_as_sf(paDf, coords = c("x", "y"), crs = 3035)
+      if (useThinning) {
+        message("Spatial thinning at ", thinDist, "m...")
+        paSf <- sf::st_as_sf(paDf, coords = c("x", "y"), crs = 3035)
 
-      paThinned <- thin(paSf, thinDist = thinDist, runs = 5)
-      thinnedCoords <- sf::st_coordinates(paThinned)
-      paThinnedDf <- sf::st_drop_geometry(paThinned)
-      paThinnedDf$x <- thinnedCoords[, 1]
-      paThinnedDf$y <- thinnedCoords[, 2]
+        paThinned <- thin(paSf, thinDist = thinDist, runs = 5)
+        thinnedCoords <- sf::st_coordinates(paThinned)
+        paThinnedDf <- sf::st_drop_geometry(paThinned)
+        paThinnedDf$x <- thinnedCoords[, 1]
+        paThinnedDf$y <- thinnedCoords[, 2]
 
-      message("After thinning: ", nrow(paThinnedDf),
-              " (", sum(paThinnedDf$occurrence == 1), " pres / ",
-              sum(paThinnedDf$occurrence == 0), " abs)")
+        message("After thinning: ", nrow(paThinnedDf),
+                " (", sum(paThinnedDf$occurrence == 1), " pres / ",
+                sum(paThinnedDf$occurrence == 0), " abs)")
+      } else {
+        message("Spatial thinning disabled -- keeping all ", nrow(paDf), " rows")
+        paThinnedDf <- paDf
+      }
 
       message("  Extracting habitat covariates...")
 

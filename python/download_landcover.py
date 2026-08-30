@@ -177,6 +177,7 @@ def poll_task(token_mgr, task_id, timeout_s=7200, interval_s=30):
             f"{API_BASE}/@datarequest_search",
             params={"status": "Finished_ok"},
             headers=token_mgr.auth_header(),
+            timeout=30,
         )
         resp.raise_for_status()
         finished = resp.json()
@@ -187,6 +188,7 @@ def poll_task(token_mgr, task_id, timeout_s=7200, interval_s=30):
             f"{API_BASE}/@datarequest_search",
             params={"status": "Rejected"},
             headers=token_mgr.auth_header(),
+            timeout=30,
         )
         if resp_err.ok and task_id in resp_err.json():
             raise RuntimeError(f"CLMS task {task_id} was rejected: {resp_err.json()[task_id]}")
@@ -202,7 +204,7 @@ def download_and_extract(download_url, out_filename, out_dir):
     as `out_filename` under `out_dir`."""
     target_path = os.path.join(out_dir, out_filename)
     print(f"  Downloading result archive from {download_url}...")
-    resp = requests.get(download_url, stream=True)
+    resp = requests.get(download_url, stream=True, timeout=60)
     resp.raise_for_status()
 
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:

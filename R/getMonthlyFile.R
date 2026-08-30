@@ -38,6 +38,12 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
     if (!is.null(r)) {
       names(r) <- sprintf("%s_%d_%02d", variable, year, month)
       terra::writeRaster(r, outFile, overwrite = TRUE)
+      # terra objects wrap GDAL/vsicurl handles that R's automatic GC does
+      # not reliably reclaim promptly in a long-running loop -- explicit
+      # rm()+gc() here is what keeps memory flat across hundreds of calls
+      # instead of accumulating open remote-file handles for the whole run.
+      rm(r)
+      gc(verbose = FALSE)
       return(invisible(outFile))
     }
     message("Falling back to daily aggregation...")
@@ -79,6 +85,12 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
   }
 
   dailyStack <- terra::rast(dailyLayers)
+  # dailyLayers is up to 31 separate open GDAL/vsicurl handles -- drop them
+  # the moment they're combined into dailyStack, don't wait for the whole
+  # function to return (see the note on the monthly-source branch above).
+  rm(dailyLayers)
+  gc(verbose = FALSE)
+
   monthly <- switch(fun,
                      "min" = terra::app(dailyStack, min, na.rm = TRUE),
                      "max" = terra::app(dailyStack, max, na.rm = TRUE),
@@ -86,5 +98,7 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
 
   names(monthly) <- sprintf("%s_%d_%02d", variable, year, month)
   terra::writeRaster(monthly, outFile, overwrite = TRUE)
+  rm(dailyStack, monthly)
+  gc(verbose = FALSE)
   invisible(outFile)
 }

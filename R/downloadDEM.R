@@ -17,11 +17,11 @@ downloadDEM <- function(demRawDir, bboxVec, pythonScriptPath, requirementsPath,
 
   dir.create(demRawDir, recursive = TRUE, showWarnings = FALSE)
 
-  Sys.setenv(DEM_OUT_DIR = demRawDir,
-             DEM_BBOX_N = bboxVec[1],
-             DEM_BBOX_W = bboxVec[2],
-             DEM_BBOX_S = bboxVec[3],
-             DEM_BBOX_E = bboxVec[4])
+  setPyEnv(list(DEM_OUT_DIR = demRawDir,
+                DEM_BBOX_N = bboxVec[1],
+                DEM_BBOX_W = bboxVec[2],
+                DEM_BBOX_S = bboxVec[3],
+                DEM_BBOX_E = bboxVec[4]))
 
   message("Downloading DEM tiles to ", demRawDir, "...")
   reticulate::py_run_file(pythonScriptPath)
