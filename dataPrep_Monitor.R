@@ -79,27 +79,31 @@ defineModule(sim, list(
     defineParameter("localeCtype", "character", "de_DE.UTF-8", NA, NA,
                     "Locale used for correct handling of German special characters."),
 
-    ## Raw external data locations (relative to outputPath(sim)) ----------------------
+    ## Raw external data locations (relative to the shared data path --
+    ## options("reproducible.destinationPathShared"), default <getwd()>/data) ----
     ## These raw datasets cannot be downloaded programmatically and must be
     ## supplied by the user at these locations before prepareOccurrenceData runs.
+    ## Deliberately NOT under outputPath(sim): raw, irreplaceable survey data
+    ## must not live inside a tree that's conceptually disposable pipeline
+    ## output (a fresh runName or an outputs/ cleanup must never risk it).
     defineParameter("ebba2CSVSubpath", "character",
-                    "raw/ebba2/ebba2_data_occurrence_50km.csv", NA, NA,
-                    "Path (relative to outputPath(sim)) to the EBBA2 occurrence CSV."),
+                    "ebba2/ebba2_data_occurrence_50km.csv", NA, NA,
+                    "Path (relative to the shared data path) to the EBBA2 occurrence CSV."),
     defineParameter("ebba2ShpSubpath", "character",
-                    "raw/ebba2/ebba2_grid50x50_v1.shp", NA, NA,
-                    "Path (relative to outputPath(sim)) to the EBBA2 grid shapefile."),
+                    "ebba2/ebba2_grid50x50_v1.shp", NA, NA,
+                    "Path (relative to the shared data path) to the EBBA2 grid shapefile."),
     defineParameter("mhbObsSubpath", "character",
-                    "raw/dda/dbird_observations_CBBM.csv", NA, NA,
-                    "Path (relative to outputPath(sim)) to the raw MhB point count CSV."),
+                    "dda/dbird_observations_CBBM.csv", NA, NA,
+                    "Path (relative to the shared data path) to the raw MhB point count CSV."),
     defineParameter("probeflaechenShpSubpath", "character",
-                    "raw/dda/MhB_Probeflaechen_DE_S2637_epsg25832.shp", NA, NA,
-                    "Path (relative to outputPath(sim)) to the Probeflaechen shapefile."),
+                    "dda/MhB_Probeflaechen_DE_S2637_epsg25832.shp", NA, NA,
+                    "Path (relative to the shared data path) to the Probeflaechen shapefile."),
     defineParameter("ddaTerritoriesXlsxSubpath", "character",
-                    "raw/dda/BirdStats_Daten2005-2024D_alle.xlsx", NA, NA,
-                    "Path (relative to outputPath(sim)) to the DDA territories xlsx."),
+                    "dda/BirdStats_Daten2005-2024D_alle.xlsx", NA, NA,
+                    "Path (relative to the shared data path) to the DDA territories xlsx."),
     defineParameter("ddaVisitsXlsxSubpath", "character",
-                    "raw/dda/BirdStats_Visits2005-2024D.xlsx", NA, NA,
-                    "Path (relative to outputPath(sim)) to the DDA visited-routes xlsx."),
+                    "dda/BirdStats_Visits2005-2024D.xlsx", NA, NA,
+                    "Path (relative to the shared data path) to the DDA visited-routes xlsx."),
 
     ## CORINE Land Cover (CLMS API) ----------------------------------------------------
     defineParameter("clmsTokenJSONPath", "character", "clms_token.json", NA, NA,
@@ -148,6 +152,12 @@ defineModule(sim, list(
 ))
 
 doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
+  # Only the manually-supplied bird survey data (EBBA2/MhB/DDA) lives under
+  # the shared data path -- everything the pipeline downloads/creates for
+  # itself (DEM, landuse, landcover, the CHELSA cache) stays under
+  # outputPath(sim) as before. See the "Raw external data locations"
+  # parameter block above for why.
+  sharedDataPath <- getOption("reproducible.destinationPathShared", file.path(getwd(), "data"))
   switch(
     eventType,
     init = {
@@ -235,13 +245,13 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
                                                  P(sim)$ebba2TrainingYear, ".tif"))
 
         sim$occurrenceData <- prepareOccurrenceData(
-          ebba2CSVPath = file.path(outputPath(sim), P(sim)$ebba2CSVSubpath),
-          ebba2ShpPath = file.path(outputPath(sim), P(sim)$ebba2ShpSubpath),
+          ebba2CSVPath = file.path(sharedDataPath, P(sim)$ebba2CSVSubpath),
+          ebba2ShpPath = file.path(sharedDataPath, P(sim)$ebba2ShpSubpath),
           bioclimFile = bioclimTrainingFile,
-          mhbObsPath = file.path(outputPath(sim), P(sim)$mhbObsSubpath),
-          ddaTerritoriesXlsxPath = file.path(outputPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
-          ddaVisitsXlsxPath = file.path(outputPath(sim), P(sim)$ddaVisitsXlsxSubpath),
-          probeflaechenShpPath = file.path(outputPath(sim), P(sim)$probeflaechenShpSubpath),
+          mhbObsPath = file.path(sharedDataPath, P(sim)$mhbObsSubpath),
+          ddaTerritoriesXlsxPath = file.path(sharedDataPath, P(sim)$ddaTerritoriesXlsxSubpath),
+          ddaVisitsXlsxPath = file.path(sharedDataPath, P(sim)$ddaVisitsXlsxSubpath),
+          probeflaechenShpPath = file.path(sharedDataPath, P(sim)$probeflaechenShpSubpath),
           habitatOutputDir = file.path(outputPath(sim), "habitat"),
           landscapeOutputDir = file.path(outputPath(sim), "landscape"),
           occurrenceOutputDir = file.path(outputPath(sim), "occurrence"),
