@@ -45,11 +45,17 @@ defineModule(sim, list(
                     "European bounding box in WGS84 as c(N, W, S, E). Used for both",
                     "the climate window and the DEM download extent."),
     defineParameter("climateResolutionM", "numeric", 50000, NA, NA,
-                    "Output resolution (m) for the climate (bioclim) rasters."),
+                    "Output resolution (m) for the climate (bioclim) rasters. Also used,",
+                    "via scaleLabel(), to name that scale's inputs/outputs subfolders --",
+                    "must match inputs_Monitor's/models_Monitor's copies of this value."),
     defineParameter("habitatResolutionM", "numeric", 200, NA, NA,
-                    "Output resolution (m) for habitat-scale rasters."),
+                    "Output resolution (m) for habitat-scale rasters. Also used, via",
+                    "scaleLabel(), to name that scale's inputs/outputs subfolders -- must",
+                    "match inputs_Monitor's/models_Monitor's copies of this value."),
     defineParameter("landscapeResolutionM", "numeric", 1000, NA, NA,
-                    "Output resolution (m) for landscape-scale rasters."),
+                    "Output resolution (m) for landscape-scale rasters. Also used, via",
+                    "scaleLabel(), to name that scale's inputs/outputs subfolders -- must",
+                    "match inputs_Monitor's/models_Monitor's copies of this value."),
 
     ## Climate --------------------------------------------------------------------
     defineParameter("climateTargetYears", "numeric", 2005:2025, NA, NA,
@@ -79,31 +85,31 @@ defineModule(sim, list(
     defineParameter("localeCtype", "character", "de_DE.UTF-8", NA, NA,
                     "Locale used for correct handling of German special characters."),
 
-    ## Raw external data locations (relative to the shared data path --
-    ## options("reproducible.destinationPathShared"), default <getwd()>/data) ----
+    ## Raw external data locations (relative to inputPath(sim)) --------------------
     ## These raw datasets cannot be downloaded programmatically and must be
     ## supplied by the user at these locations before prepareOccurrenceData runs.
-    ## Deliberately NOT under outputPath(sim): raw, irreplaceable survey data
-    ## must not live inside a tree that's conceptually disposable pipeline
-    ## output (a fresh runName or an outputs/ cleanup must never risk it).
+    ## Deliberately under inputPath(sim), never outputPath(sim): raw,
+    ## irreplaceable survey data must not live inside a tree that's
+    ## conceptually disposable pipeline output (a fresh runName or an
+    ## outputs/ cleanup must never risk it).
     defineParameter("ebba2CSVSubpath", "character",
-                    "ebba2/ebba2_data_occurrence_50km.csv", NA, NA,
-                    "Path (relative to the shared data path) to the EBBA2 occurrence CSV."),
+                    "response/raw/ornitho/ebba2_data_occurrence_50km.csv", NA, NA,
+                    "Path (relative to inputPath(sim)) to the EBBA2 occurrence CSV."),
     defineParameter("ebba2ShpSubpath", "character",
-                    "ebba2/ebba2_grid50x50_v1.shp", NA, NA,
-                    "Path (relative to the shared data path) to the EBBA2 grid shapefile."),
+                    "response/raw/ornitho/ebba2_grid50x50_v1.shp", NA, NA,
+                    "Path (relative to inputPath(sim)) to the EBBA2 grid shapefile."),
     defineParameter("mhbObsSubpath", "character",
-                    "dda/dbird_observations_CBBM.csv", NA, NA,
-                    "Path (relative to the shared data path) to the raw MhB point count CSV."),
+                    "response/raw/MhB/dbird_observations_CBBM.csv", NA, NA,
+                    "Path (relative to inputPath(sim)) to the raw MhB point count CSV."),
     defineParameter("probeflaechenShpSubpath", "character",
-                    "dda/MhB_Probeflaechen_DE_S2637_epsg25832.shp", NA, NA,
-                    "Path (relative to the shared data path) to the Probeflaechen shapefile."),
+                    "response/raw/MhB/MhB_Probeflaechen_DE_S2637_epsg25832.shp", NA, NA,
+                    "Path (relative to inputPath(sim)) to the Probeflaechen shapefile."),
     defineParameter("ddaTerritoriesXlsxSubpath", "character",
-                    "dda/BirdStats_Daten2005-2024D_alle.xlsx", NA, NA,
-                    "Path (relative to the shared data path) to the DDA territories xlsx."),
+                    "response/raw/territories/BirdStats_Daten2005-2024D_alle.xlsx", NA, NA,
+                    "Path (relative to inputPath(sim)) to the DDA territories xlsx."),
     defineParameter("ddaVisitsXlsxSubpath", "character",
-                    "dda/BirdStats_Visits2005-2024D.xlsx", NA, NA,
-                    "Path (relative to the shared data path) to the DDA visited-routes xlsx."),
+                    "response/raw/territories/BirdStats_Visits2005-2024D.xlsx", NA, NA,
+                    "Path (relative to inputPath(sim)) to the DDA visited-routes xlsx."),
 
     ## CORINE Land Cover (CLMS API) ----------------------------------------------------
     defineParameter("clmsTokenJSONPath", "character", "clms_token.json", NA, NA,
@@ -152,12 +158,14 @@ defineModule(sim, list(
 ))
 
 doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
-  # Only the manually-supplied bird survey data (EBBA2/MhB/DDA) lives under
-  # the shared data path -- everything the pipeline downloads/creates for
-  # itself (DEM, landuse, landcover, the CHELSA cache) stays under
-  # outputPath(sim) as before. See the "Raw external data locations"
-  # parameter block above for why.
-  sharedDataPath <- getOption("reproducible.destinationPathShared", file.path(getwd(), "data"))
+  # Manually-supplied bird survey data (EBBA2/MhB/DDA) lives under
+  # inputPath(sim)/response/raw/<type>/ -- see the "Raw external data
+  # locations" parameter block above. Everything the pipeline
+  # downloads/creates for itself (DEM, landuse, landcover, the CHELSA
+  # cache, and every scale's final processed covariates) lives under
+  # inputPath(sim)/predictors/{raw,processed}/. Nothing pipeline-input
+  # lives under outputPath(sim) -- that's reserved for model fitting/
+  # prediction results (models_Monitor).
   switch(
     eventType,
     init = {
@@ -177,8 +185,9 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           europeBboxVec = P(sim)$europeBbox,
           targetCRS = P(sim)$targetCRS,
           climateResolutionM = P(sim)$climateResolutionM,
-          chelsaMonthlyDir = file.path(outputPath(sim), "processed", "chelsa_monthly", "europe"),
-          climateOutputDir = file.path(outputPath(sim), "climate"))
+          chelsaMonthlyDir = file.path(inputPath(sim), "predictors", "raw", "chelsa_monthly", "europe"),
+          climateOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                        scaleLabel(P(sim)$climateResolutionM)))
       }
       # ! ----- STOP EDITING ----- ! #
     },
@@ -187,10 +196,12 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$demPaths) || P(sim)$rerunDEM) {
         sim$demPaths <- prepareDEM(
-          demRawDir = file.path(outputPath(sim), "raw", "dem"),
-          processedDir = file.path(outputPath(sim), "processed", "dem"),
-          habitatOutputDir = file.path(outputPath(sim), "habitat"),
-          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          demRawDir = file.path(inputPath(sim), "predictors", "raw", "dem"),
+          processedDir = file.path(inputPath(sim), "predictors", "processed", "dem"),
+          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                        scaleLabel(P(sim)$habitatResolutionM)),
+          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                          scaleLabel(P(sim)$landscapeResolutionM)),
           bboxVec = P(sim)$europeBbox,
           targetCRS = P(sim)$targetCRS,
           habitatResolutionM = P(sim)$habitatResolutionM,
@@ -205,9 +216,11 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landusePaths) || P(sim)$rerunLanduse) {
         sim$landusePaths <- prepareLanduse(
-          landuseRawDir = file.path(outputPath(sim), "raw", "landuse"),
-          habitatOutputDir = file.path(outputPath(sim), "habitat"),
-          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          landuseRawDir = file.path(inputPath(sim), "predictors", "raw", "landuse"),
+          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                        scaleLabel(P(sim)$habitatResolutionM)),
+          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                          scaleLabel(P(sim)$landscapeResolutionM)),
           landuseYears = P(sim)$landuseYears,
           targetCRS = P(sim)$targetCRS,
           habitatResolutionM = P(sim)$habitatResolutionM,
@@ -222,9 +235,11 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landcoverPaths) || P(sim)$rerunLandcover) {
         sim$landcoverPaths <- prepareLandcover(
-          landcoverRawDir = file.path(outputPath(sim), "raw", "landcover"),
-          habitatOutputDir = file.path(outputPath(sim), "habitat"),
-          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
+          landcoverRawDir = file.path(inputPath(sim), "predictors", "raw", "landcover"),
+          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                        scaleLabel(P(sim)$habitatResolutionM)),
+          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                          scaleLabel(P(sim)$landscapeResolutionM)),
           bboxVec = P(sim)$europeBbox,
           tokenJSONPath = resolvePath(outputPath(sim), P(sim)$clmsTokenJSONPath),
           targetCRS = P(sim)$targetCRS,
@@ -240,21 +255,24 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$occurrenceData) || P(sim)$rerunOccurrenceData) {
         windowStart <- P(sim)$ebba2TrainingYear - (P(sim)$climateWindowLength - 1)
-        bioclimTrainingFile <- file.path(outputPath(sim), "climate",
+        bioclimTrainingFile <- file.path(inputPath(sim), "predictors", "processed",
+                                          scaleLabel(P(sim)$climateResolutionM),
                                           paste0("bioclim_", windowStart, "-",
                                                  P(sim)$ebba2TrainingYear, ".tif"))
 
         sim$occurrenceData <- prepareOccurrenceData(
-          ebba2CSVPath = file.path(sharedDataPath, P(sim)$ebba2CSVSubpath),
-          ebba2ShpPath = file.path(sharedDataPath, P(sim)$ebba2ShpSubpath),
+          ebba2CSVPath = file.path(inputPath(sim), P(sim)$ebba2CSVSubpath),
+          ebba2ShpPath = file.path(inputPath(sim), P(sim)$ebba2ShpSubpath),
           bioclimFile = bioclimTrainingFile,
-          mhbObsPath = file.path(sharedDataPath, P(sim)$mhbObsSubpath),
-          ddaTerritoriesXlsxPath = file.path(sharedDataPath, P(sim)$ddaTerritoriesXlsxSubpath),
-          ddaVisitsXlsxPath = file.path(sharedDataPath, P(sim)$ddaVisitsXlsxSubpath),
-          probeflaechenShpPath = file.path(sharedDataPath, P(sim)$probeflaechenShpSubpath),
-          habitatOutputDir = file.path(outputPath(sim), "habitat"),
-          landscapeOutputDir = file.path(outputPath(sim), "landscape"),
-          occurrenceOutputDir = file.path(outputPath(sim), "occurrence"),
+          mhbObsPath = file.path(inputPath(sim), P(sim)$mhbObsSubpath),
+          ddaTerritoriesXlsxPath = file.path(inputPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
+          ddaVisitsXlsxPath = file.path(inputPath(sim), P(sim)$ddaVisitsXlsxSubpath),
+          probeflaechenShpPath = file.path(inputPath(sim), P(sim)$probeflaechenShpSubpath),
+          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                        scaleLabel(P(sim)$habitatResolutionM)),
+          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
+                                          scaleLabel(P(sim)$landscapeResolutionM)),
+          occurrenceOutputDir = file.path(inputPath(sim), "response", "processed"),
           species = P(sim)$species,
           habitatYears = P(sim)$habitatYears,
           landscapeYears = P(sim)$landscapeYears,

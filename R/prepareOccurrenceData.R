@@ -15,7 +15,8 @@
 #' @param habitatOutputDir Character. Directory with habitat-scale covariates.
 #' @param landscapeOutputDir Character. Directory with landscape-scale covariates.
 #' @param occurrenceOutputDir Character. Root directory for occurrence outputs;
-#'   `europe/`, `habitat/`, and `landscape/` subfolders are created under it.
+#'   `ornitho/` (EBBA2/European), `MhB/`, and `territories/` (DDA) subfolders
+#'   are created under it.
 #' @param species Character vector of Latin species names to process.
 #' @param habitatYears Integer vector of years for the habitat SDM.
 #' @param landscapeYears Integer vector of years for the landscape SDM.
@@ -38,7 +39,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     ebba2CSVPath = ebba2CSVPath,
     ebba2ShpPath = ebba2ShpPath,
     bioclimFile = bioclimFile,
-    outputDir = file.path(occurrenceOutputDir, "europe"),
+    outputDir = file.path(occurrenceOutputDir, "ornitho"),
     species = species,
     useThinning = useThinning)
 
@@ -46,7 +47,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     mhbObsPath = mhbObsPath,
     probeflaechenShpPath = probeflaechenShpPath,
     habitatOutputDir = habitatOutputDir,
-    outputDir = file.path(occurrenceOutputDir, "habitat"),
+    outputDir = file.path(occurrenceOutputDir, "MhB"),
     species = species,
     habitatYears = habitatYears,
     localeCtype = localeCtype,
@@ -58,7 +59,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     probeflaechenShpPath = probeflaechenShpPath,
     landscapeOutputDir = landscapeOutputDir,
     habitatOutputDir = habitatOutputDir,
-    outputDir = file.path(occurrenceOutputDir, "landscape"),
+    outputDir = file.path(occurrenceOutputDir, "territories"),
     species = species,
     landscapeYears = landscapeYears,
     localeCtype = localeCtype,
