@@ -11,10 +11,13 @@
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
 #' @param habitatResolutionM Numeric. Habitat scale resolution in metres.
 #' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
+#' @param force Logical. If TRUE, recompute and overwrite even if a valid
+#'   cached output already exists (e.g. a bug was found in the raw data).
 #' @return Invisibly, a list with `habitat` and `landscape` output paths.
 computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
                               landscapeOutputDir, targetCRS,
-                              habitatResolutionM, landscapeResolutionM) {
+                              habitatResolutionM, landscapeResolutionM,
+                              force = FALSE) {
 
   rawFile <- file.path(landcoverRawDir, corineRawFilename(corineYear))
   if (!file.exists(rawFile)) {
@@ -24,7 +27,7 @@ computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
   outHabitat <- file.path(habitatOutputDir, paste0("landcover_", corineYear, "_habitat.tif"))
   outLandscape <- file.path(landscapeOutputDir, paste0("landcover_", corineYear, "_landscape.tif"))
 
-  if (isValidRasterFile(outHabitat) && isValidRasterFile(outLandscape)) {
+  if (!force && isValidRasterFile(outHabitat) && isValidRasterFile(outLandscape)) {
     message("Cache hit -- skipping CORINE ", corineYear)
     return(invisible(list(habitat = outHabitat, landscape = outLandscape)))
   }

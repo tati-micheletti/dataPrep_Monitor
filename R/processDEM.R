@@ -15,10 +15,14 @@
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
 #' @param habitatResolutionM Numeric. Habitat scale resolution in metres.
 #' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
+#' @param force Logical. If TRUE, recompute and overwrite every intermediate
+#'   and output step even if a valid cached file already exists (e.g. a bug
+#'   was found in the raw DEM tiles).
 #' @return Invisibly, a named list of output file paths per scale/layer.
 processDEM <- function(demRawDir, processedDir, habitatOutputDir,
                         landscapeOutputDir, targetCRS,
-                        habitatResolutionM, landscapeResolutionM) {
+                        habitatResolutionM, landscapeResolutionM,
+                        force = FALSE) {
 
   dir.create(processedDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(habitatOutputDir, recursive = TRUE, showWarnings = FALSE)
@@ -28,7 +32,7 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
   message("Step 1: Building virtual mosaic from GLO-30 tiles...")
   vrtPath <- file.path(processedDir, "dem_mosaic.vrt")
 
-  if (!file.exists(vrtPath)) {
+  if (force || !file.exists(vrtPath)) {
     tileFiles <- list.files(demRawDir, pattern = "\\.tif$", full.names = TRUE)
     message("  Found ", length(tileFiles), " tiles.")
     terra::vrt(tileFiles, vrtPath)
@@ -43,7 +47,7 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
   message("Step 2: Reprojecting to ", targetCRS, " at 30m...")
   dem30mPath <- file.path(processedDir, "dem_30m_laea.tif")
 
-  if (!isValidRasterFile(dem30mPath)) {
+  if (force || !isValidRasterFile(dem30mPath)) {
     dem30m <- terra::project(demVrt, targetCRS, res = 30, method = "bilinear")
     names(dem30m) <- "elevation"
     terra::writeRaster(dem30m, dem30mPath, overwrite = TRUE)
@@ -59,7 +63,7 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
   message("Step 3: Computing terrain derivatives at 30m...")
 
   slope30mPath <- file.path(processedDir, "slope_30m_laea.tif")
-  if (!isValidRasterFile(slope30mPath)) {
+  if (force || !isValidRasterFile(slope30mPath)) {
     message("  Computing slope...")
     slope30m <- terra::terrain(dem30m, v = "slope", unit = "degrees")
     names(slope30m) <- "slope"
@@ -71,7 +75,7 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
   slope30m <- terra::rast(slope30mPath)
 
   solar30mPath <- file.path(processedDir, "solar_rad_30m_laea.tif")
-  if (!isValidRasterFile(solar30mPath)) {
+  if (force || !isValidRasterFile(solar30mPath)) {
     message("  Computing solar radiation aspect index (trasp)...")
     message("  (May take 20-40 minutes at 30m)")
     solar30m <- spatialEco::trasp(dem30m)
@@ -103,7 +107,8 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
         layerName = layerName,
         outputDir = scaleCfg$dir,
         targetResM = scaleCfg$res,
-        targetCRS = targetCRS)
+        targetCRS = targetCRS,
+        force = force)
     }
   }
 

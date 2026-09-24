@@ -12,11 +12,14 @@
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
 #' @param habitatResolutionM Numeric. Habitat scale resolution in metres.
 #' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
+#' @param force Logical. If TRUE, recompute and overwrite even if a valid
+#'   cached output already exists (e.g. a bug was found in the raw data).
 #' @return Invisibly, a list with `habitat` and `landscape` output paths,
 #'   or NULL if no raw file was found for `year`.
 computeLanduse <- function(year, landuseRawDir, habitatOutputDir,
                             landscapeOutputDir, targetCRS,
-                            habitatResolutionM, landscapeResolutionM) {
+                            habitatResolutionM, landscapeResolutionM,
+                            force = FALSE) {
 
   # Find raw file for this year -- check CTM datasets first (Schwieder/Tetteh v302)
   ctmPatterns <- c(file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v202_COG.tif", year)),
@@ -47,7 +50,7 @@ computeLanduse <- function(year, landuseRawDir, habitatOutputDir,
   outHabitat <- file.path(habitatOutputDir, paste0("landuse_", year, "_habitat.tif"))
   outLandscape <- file.path(landscapeOutputDir, paste0("landuse_", year, "_landscape.tif"))
 
-  if (isValidRasterFile(outHabitat) && isValidRasterFile(outLandscape)) {
+  if (!force && isValidRasterFile(outHabitat) && isValidRasterFile(outLandscape)) {
     message("  Cache hit -- skipping year ", year)
     return(invisible(list(habitat = outHabitat, landscape = outLandscape)))
   }

@@ -14,11 +14,14 @@
 #' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
 #' @param pythonScriptPath Character. Path to `download_dem.py`.
 #' @param requirementsPath Character. Path to `requirements.txt`.
+#' @param force Logical. If TRUE, recompute and overwrite every intermediate
+#'   and output step even if a valid cached file already exists (e.g. a bug
+#'   was found in the raw DEM tiles).
 #' @return Invisibly, a named list of output DEM derivative file paths.
 prepareDEM <- function(demRawDir, processedDir, habitatOutputDir,
                         landscapeOutputDir, bboxVec, targetCRS,
                         habitatResolutionM, landscapeResolutionM,
-                        pythonScriptPath, requirementsPath) {
+                        pythonScriptPath, requirementsPath, force = FALSE) {
 
   downloadDEM(demRawDir = demRawDir,
               bboxVec = bboxVec,
@@ -31,5 +34,6 @@ prepareDEM <- function(demRawDir, processedDir, habitatOutputDir,
              landscapeOutputDir = landscapeOutputDir,
              targetCRS = targetCRS,
              habitatResolutionM = habitatResolutionM,
-             landscapeResolutionM = landscapeResolutionM)
+             landscapeResolutionM = landscapeResolutionM,
+             force = force)
 }

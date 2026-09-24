@@ -6,13 +6,15 @@
 #' @param outputDir Character. Directory to save the aggregated raster in.
 #' @param targetResM Numeric. Target resolution in metres.
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
+#' @param force Logical. If TRUE, recompute and overwrite even if a valid
+#'   cached output already exists (e.g. a bug was found in the raw data).
 #' @return Invisibly, the path to the saved raster.
 aggregateAndSave <- function(rast30m, scaleName, layerName, outputDir,
-                              targetResM, targetCRS) {
+                              targetResM, targetCRS, force = FALSE) {
 
   outFile <- file.path(outputDir, paste0(layerName, "_", scaleName, ".tif"))
 
-  if (isValidRasterFile(outFile)) {
+  if (!force && isValidRasterFile(outFile)) {
     message("  Cache hit: ", basename(outFile))
     return(invisible(outFile))
   }

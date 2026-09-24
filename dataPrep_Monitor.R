@@ -207,7 +207,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           habitatResolutionM = P(sim)$habitatResolutionM,
           landscapeResolutionM = P(sim)$landscapeResolutionM,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_dem.py"),
-          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"))
+          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
+          force = P(sim)$rerunDEM)
       }
       # ! ----- STOP EDITING ----- ! #
     },
@@ -226,7 +227,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           habitatResolutionM = P(sim)$habitatResolutionM,
           landscapeResolutionM = P(sim)$landscapeResolutionM,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landuse.py"),
-          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"))
+          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
+          force = P(sim)$rerunLanduse)
       }
       # ! ----- STOP EDITING ----- ! #
     },
@@ -246,7 +248,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           habitatResolutionM = P(sim)$habitatResolutionM,
           landscapeResolutionM = P(sim)$landscapeResolutionM,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landcover.py"),
-          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"))
+          requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
+          force = P(sim)$rerunLandcover)
       }
       # ! ----- STOP EDITING ----- ! #
     },

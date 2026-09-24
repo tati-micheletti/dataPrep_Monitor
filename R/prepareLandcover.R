@@ -16,10 +16,14 @@
 #' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
 #' @param pythonScriptPath Character. Path to `download_landcover.py`.
 #' @param requirementsPath Character. Path to `requirements.txt`.
+#' @param force Logical. If TRUE, recompute and overwrite every CORINE year
+#'   even if a valid cached output already exists (e.g. a bug was found in
+#'   the raw CORINE rasters).
 #' @return Invisibly, a named list of output file paths per CORINE year.
 prepareLandcover <- function(landcoverRawDir, habitatOutputDir, landscapeOutputDir,
                               bboxVec, tokenJSONPath, targetCRS, habitatResolutionM,
-                              landscapeResolutionM, pythonScriptPath, requirementsPath) {
+                              landscapeResolutionM, pythonScriptPath, requirementsPath,
+                              force = FALSE) {
 
   downloadLandcover(landcoverRawDir = landcoverRawDir,
                      bboxVec = bboxVec,
@@ -42,7 +46,8 @@ prepareLandcover <- function(landcoverRawDir, habitatOutputDir, landscapeOutputD
                       landscapeOutputDir = landscapeOutputDir,
                       targetCRS = targetCRS,
                       habitatResolutionM = habitatResolutionM,
-                      landscapeResolutionM = landscapeResolutionM)
+                      landscapeResolutionM = landscapeResolutionM,
+                      force = force)
   })
   names(outFiles) <- corineYears
 

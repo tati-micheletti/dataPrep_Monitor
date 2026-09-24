@@ -14,11 +14,14 @@
 #' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
 #' @param pythonScriptPath Character. Path to `download_landuse.py`.
 #' @param requirementsPath Character. Path to `requirements.txt`.
+#' @param force Logical. If TRUE, recompute and overwrite every year even if
+#'   a valid cached output already exists (e.g. a bug was found in the raw
+#'   crop type maps).
 #' @return Invisibly, a named list of output file paths per year.
 prepareLanduse <- function(landuseRawDir, habitatOutputDir, landscapeOutputDir,
                             landuseYears, targetCRS, habitatResolutionM,
                             landscapeResolutionM, pythonScriptPath,
-                            requirementsPath) {
+                            requirementsPath, force = FALSE) {
 
   downloadLanduse(landuseRawDir = landuseRawDir,
                    pythonScriptPath = pythonScriptPath,
@@ -41,7 +44,8 @@ prepareLanduse <- function(landuseRawDir, habitatOutputDir, landscapeOutputDir,
                     landscapeOutputDir = landscapeOutputDir,
                     targetCRS = targetCRS,
                     habitatResolutionM = habitatResolutionM,
-                    landscapeResolutionM = landscapeResolutionM)
+                    landscapeResolutionM = landscapeResolutionM,
+                    force = force)
   })
   names(outFiles) <- landuseYears
 
