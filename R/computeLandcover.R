@@ -27,10 +27,18 @@ computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
   outHabitat <- file.path(habitatOutputDir, paste0("landcover_", corineYear, "_habitat.tif"))
   outLandscape <- file.path(landscapeOutputDir, paste0("landcover_", corineYear, "_landscape.tif"))
 
-  if (!force && isValidRasterFile(outHabitat) && isValidRasterFile(outLandscape)) {
+  # Independent per-scale cache check (Lisa Hildebrand's v2 pattern) -- a
+  # scale whose cached output is already valid is skipped even when the
+  # OTHER scale needs recomputing, instead of redoing both from scratch.
+  needHabitat <- force || !isValidRasterFile(outHabitat)
+  needLandscape <- force || !isValidRasterFile(outLandscape)
+
+  if (!needHabitat && !needLandscape) {
     message("Cache hit -- skipping CORINE ", corineYear)
     return(invisible(list(habitat = outHabitat, landscape = outLandscape)))
   }
+  if (!needHabitat) message("Habitat-scale cache hit -- computing landscape scale only")
+  if (!needLandscape) message("Landscape-scale cache hit -- computing habitat scale only")
 
   message("Loading CORINE ", corineYear, ": ", basename(rawFile))
   lc <- terra::setMinMax(terra::rast(rawFile))
@@ -51,17 +59,22 @@ computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
   for (catName in names(categories)) {
     codes <- categories[[catName]]
     message("    ", catName, " (codes: ", paste(codes, collapse = ", "), ")")
-    habitatLayers[[catName]] <- makeCategoryProportionLayer(lc, codes, habitatResolutionM, catName, targetCRS)
-    landscapeLayers[[catName]] <- makeCategoryProportionLayer(lc, codes, landscapeResolutionM, catName, targetCRS)
+    if (needHabitat) {
+      habitatLayers[[catName]] <- makeCategoryProportionLayer(lc, codes, habitatResolutionM, catName, targetCRS)
+    }
+    if (needLandscape) {
+      landscapeLayers[[catName]] <- makeCategoryProportionLayer(lc, codes, landscapeResolutionM, catName, targetCRS)
+    }
   }
 
-  habitatStack <- terra::rast(habitatLayers)
-  landscapeStack <- terra::rast(landscapeLayers)
-
-  terra::writeRaster(habitatStack, outHabitat, overwrite = TRUE)
-  terra::writeRaster(landscapeStack, outLandscape, overwrite = TRUE)
-  message("  Saved habitat:   ", outHabitat)
-  message("  Saved landscape: ", outLandscape)
+  if (needHabitat) {
+    terra::writeRaster(terra::rast(habitatLayers), outHabitat, overwrite = TRUE)
+    message("  Saved habitat:   ", outHabitat)
+  }
+  if (needLandscape) {
+    terra::writeRaster(terra::rast(landscapeLayers), outLandscape, overwrite = TRUE)
+    message("  Saved landscape: ", outLandscape)
+  }
 
   invisible(list(habitat = outHabitat, landscape = outLandscape))
 }

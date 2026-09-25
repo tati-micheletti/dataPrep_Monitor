@@ -50,10 +50,18 @@ computeLanduse <- function(year, landuseRawDir, habitatOutputDir,
   outHabitat <- file.path(habitatOutputDir, paste0("landuse_", year, "_habitat.tif"))
   outLandscape <- file.path(landscapeOutputDir, paste0("landuse_", year, "_landscape.tif"))
 
-  if (!force && isValidRasterFile(outHabitat) && isValidRasterFile(outLandscape)) {
+  # Independent per-scale cache check (Lisa Hildebrand's v2 pattern) -- a
+  # scale whose cached output is already valid is skipped even when the
+  # OTHER scale needs recomputing, instead of redoing both from scratch.
+  needHabitat <- force || !isValidRasterFile(outHabitat)
+  needLandscape <- force || !isValidRasterFile(outLandscape)
+
+  if (!needHabitat && !needLandscape) {
     message("  Cache hit -- skipping year ", year)
     return(invisible(list(habitat = outHabitat, landscape = outLandscape)))
   }
+  if (!needHabitat) message("  Habitat-scale cache hit -- computing landscape scale only")
+  if (!needLandscape) message("  Landscape-scale cache hit -- computing habitat scale only")
 
   message("  Loading and reprojecting crop type map...")
   cropMap <- terra::rast(rawFile)
@@ -76,13 +84,16 @@ computeLanduse <- function(year, landuseRawDir, habitatOutputDir,
       # HCTM years: hedges not mapped -- fill with NA
       message("    hedges -- NA (not mapped in HCTM dataset)")
 
-      naHab <- makeCategoryProportionLayer(cropMap, -9999, habitatResolutionM, "hedges", targetCRS)
-      naLand <- makeCategoryProportionLayer(cropMap, -9999, landscapeResolutionM, "hedges", targetCRS)
-      naHab[] <- NA
-      naLand[] <- NA
-
-      habitatLayers[["hedges"]] <- naHab
-      landscapeLayers[["hedges"]] <- naLand
+      if (needHabitat) {
+        naHab <- makeCategoryProportionLayer(cropMap, -9999, habitatResolutionM, "hedges", targetCRS)
+        naHab[] <- NA
+        habitatLayers[["hedges"]] <- naHab
+      }
+      if (needLandscape) {
+        naLand <- makeCategoryProportionLayer(cropMap, -9999, landscapeResolutionM, "hedges", targetCRS)
+        naLand[] <- NA
+        landscapeLayers[["hedges"]] <- naLand
+      }
       next
     }
 
@@ -90,17 +101,22 @@ computeLanduse <- function(year, landuseRawDir, habitatOutputDir,
     if (is.null(codes)) next
 
     message("    ", catName)
-    habitatLayers[[catName]] <- makeCategoryProportionLayer(cropMap, codes, habitatResolutionM, catName, targetCRS)
-    landscapeLayers[[catName]] <- makeCategoryProportionLayer(cropMap, codes, landscapeResolutionM, catName, targetCRS)
+    if (needHabitat) {
+      habitatLayers[[catName]] <- makeCategoryProportionLayer(cropMap, codes, habitatResolutionM, catName, targetCRS)
+    }
+    if (needLandscape) {
+      landscapeLayers[[catName]] <- makeCategoryProportionLayer(cropMap, codes, landscapeResolutionM, catName, targetCRS)
+    }
   }
 
-  habitatStack <- terra::rast(habitatLayers)
-  landscapeStack <- terra::rast(landscapeLayers)
-
-  terra::writeRaster(habitatStack, outHabitat, overwrite = TRUE)
-  terra::writeRaster(landscapeStack, outLandscape, overwrite = TRUE)
-  message("  Saved habitat:   ", outHabitat)
-  message("  Saved landscape: ", outLandscape)
+  if (needHabitat) {
+    terra::writeRaster(terra::rast(habitatLayers), outHabitat, overwrite = TRUE)
+    message("  Saved habitat:   ", outHabitat)
+  }
+  if (needLandscape) {
+    terra::writeRaster(terra::rast(landscapeLayers), outLandscape, overwrite = TRUE)
+    message("  Saved landscape: ", outLandscape)
+  }
 
   invisible(list(habitat = outHabitat, landscape = outLandscape))
 }
