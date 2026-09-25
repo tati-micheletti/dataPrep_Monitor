@@ -25,6 +25,12 @@
 #'   (following Wiedenroth et al.) at all three scales? Does NOT restore
 #'   abundance data when FALSE -- occurrence is already binarized to
 #'   presence/absence upstream of thinning in each function.
+#' @param thinDistEuropeM Numeric. Spatial thinning distance (m) at the
+#'   European climate scale. Default 100000 (2x the 50km climate resolution).
+#' @param thinDistHabitatM Numeric. Spatial thinning distance (m) at the
+#'   German habitat scale. Default 400 (2x the 200m habitat resolution).
+#' @param thinDistLandscapeM Numeric. Spatial thinning distance (m) at the
+#'   German landscape scale. Default 2000 (2x the 1km landscape resolution).
 #' @return Invisibly, a list with `europe`, `gerHabitat`, and
 #'   `gerLandscape` output file path vectors.
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
@@ -33,7 +39,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    habitatOutputDir, landscapeOutputDir,
                                    occurrenceOutputDir, species, habitatYears,
                                    landscapeYears, localeCtype = "de_DE.UTF-8",
-                                   useThinning = TRUE) {
+                                   useThinning = TRUE, thinDistEuropeM = 100000,
+                                   thinDistHabitatM = 400, thinDistLandscapeM = 2000) {
 
   europeFiles <- occurrencePrepEurope(
     ebba2CSVPath = ebba2CSVPath,
@@ -41,7 +48,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     bioclimFile = bioclimFile,
     outputDir = file.path(occurrenceOutputDir, "ornitho"),
     species = species,
-    useThinning = useThinning)
+    useThinning = useThinning,
+    thinDist = thinDistEuropeM)
 
   gerHabitatFiles <- occurrencePrepGerHabitat(
     mhbObsPath = mhbObsPath,
@@ -51,7 +59,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     species = species,
     habitatYears = habitatYears,
     localeCtype = localeCtype,
-    useThinning = useThinning)
+    useThinning = useThinning,
+    thinDist = thinDistHabitatM)
 
   gerLandscapeFiles <- occurrencePrepGerLandscape(
     ddaTerritoriesXlsxPath = ddaTerritoriesXlsxPath,
@@ -63,7 +72,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     species = species,
     landscapeYears = landscapeYears,
     localeCtype = localeCtype,
-    useThinning = useThinning)
+    useThinning = useThinning,
+    thinDist = thinDistLandscapeM)
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,

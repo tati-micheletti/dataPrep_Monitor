@@ -135,7 +135,16 @@ defineModule(sim, list(
                     "Should occurrence points be spatially thinned (thin.R, following",
                     "Wiedenroth et al.) before saving? Does NOT restore abundance data",
                     "when FALSE -- occurrence is already binarized to presence/absence",
-                    "upstream of thinning in all three occurrencePrep* functions.")
+                    "upstream of thinning in all three occurrencePrep* functions."),
+    defineParameter("thinDistEuropeM", "numeric", 100000, NA, NA,
+                    "Spatial thinning distance (m) at the European climate scale.",
+                    "Default 100000 (2x the 50km climate resolution)."),
+    defineParameter("thinDistHabitatM", "numeric", 400, NA, NA,
+                    "Spatial thinning distance (m) at the German habitat scale.",
+                    "Default 400 (2x the 200m habitat resolution)."),
+    defineParameter("thinDistLandscapeM", "numeric", 2000, NA, NA,
+                    "Spatial thinning distance (m) at the German landscape scale.",
+                    "Default 2000 (2x the 1km landscape resolution).")
   ),
   inputObjects = bindrows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
@@ -280,7 +289,10 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           habitatYears = P(sim)$habitatYears,
           landscapeYears = P(sim)$landscapeYears,
           localeCtype = P(sim)$localeCtype,
-          useThinning = P(sim)$useSpatialThinning)
+          useThinning = P(sim)$useSpatialThinning,
+          thinDistEuropeM = P(sim)$thinDistEuropeM,
+          thinDistHabitatM = P(sim)$thinDistHabitatM,
+          thinDistLandscapeM = P(sim)$thinDistLandscapeM)
       }
       # ! ----- STOP EDITING ----- ! #
     },
