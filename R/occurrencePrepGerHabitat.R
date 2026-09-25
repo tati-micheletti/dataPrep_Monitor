@@ -20,15 +20,30 @@
 #' @param species Character vector of Latin species names to process.
 #' @param habitatYears Integer vector of years to process.
 #' @param localeCtype Character. Locale for German special characters.
-#' @param thinDist Numeric. Spatial thinning distance in metres.
+#' @param thinDist Numeric. Default spatial thinning distance in metres, used
+#'   for any species without its own entry in `perSpeciesThinDist`.
+#' @param perSpeciesThinDist Named numeric vector/list, or NULL (default).
+#'   Per-species thinning distance overrides, keyed by species Latin name --
+#'   e.g. sourced from `speciesConfig_general.csv`'s `thinning_dist_m`
+#'   column (habitat rows) via `loadSpeciesGeneralConfig()`.
 #' @param useThinning Logical. Should occurrence points be spatially thinned?
 #'   Does NOT restore abundance data when FALSE -- `TOTAL_COUNT` is already
 #'   discarded (deduplicated to one presence per cell) upstream of thinning.
+#' @param brutzeitcodeFilter Named character vector/list, or NULL (default).
+#'   Per-species ATLAS_CODE PREFIX filter, keyed by species Latin name (e.g.
+#'   `"C"` keeps only confirmed-breeding codes C10/C11a/.../C16, matching the
+#'   German atlas A=possible/B=probable/C=confirmed convention). Applied ON
+#'   TOP OF the existing global ATLAS_CODE filter below (which already
+#'   excludes the weakest "A"-with-no-number tier for everyone) -- a species
+#'   without an entry here keeps that global filter's full range unchanged.
+#'   Sourced from `speciesConfig_general.csv`'s `brutzeitcode_filter` column
+#'   (habitat rows only -- DDA territories/MhB-landscape have no ATLAS_CODE).
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       habitatOutputDir, outputDir, species,
                                       habitatYears, localeCtype = "de_DE.UTF-8",
-                                      thinDist = 400, useThinning = TRUE) {
+                                      thinDist = 400, perSpeciesThinDist = NULL,
+                                      useThinning = TRUE, brutzeitcodeFilter = NULL) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
@@ -127,6 +142,15 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
       }
 
       spPres <- df |> dplyr::filter(latin_name == sp, year == yr)
+
+      if (!is.null(brutzeitcodeFilter) && sp %in% names(brutzeitcodeFilter)) {
+        prefix <- brutzeitcodeFilter[[sp]]
+        nBeforeCode <- nrow(spPres)
+        spPres <- spPres[startsWith(spPres$ATLAS_CODE, prefix), ]
+        message("  ATLAS_CODE filter '", prefix, "*' for ", sp, ": ",
+                nBeforeCode, " -> ", nrow(spPres), " records")
+      }
+
       spPresNodup <- spPres[!duplicated(spPres$cell), ]
 
       nPres <- nrow(spPresNodup)
@@ -168,10 +192,15 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
       message("Total PA: ", nrow(paDf), " (", nPres, " pres / ", nAbs, " abs)")
 
       if (useThinning) {
-        message("Spatial thinning at ", thinDist, "m...")
+        spThinDist <- if (!is.null(perSpeciesThinDist) && sp %in% names(perSpeciesThinDist)) {
+          perSpeciesThinDist[[sp]]
+        } else {
+          thinDist
+        }
+        message("Spatial thinning at ", spThinDist, "m...")
         paSf <- sf::st_as_sf(paDf, coords = c("x", "y"), crs = 3035)
 
-        paThinned <- thin(paSf, thinDist = thinDist, runs = 5)
+        paThinned <- thin(paSf, thinDist = spThinDist, runs = 5)
         thinnedCoords <- sf::st_coordinates(paThinned)
         paThinnedDf <- sf::st_drop_geometry(paThinned)
         paThinnedDf$x <- thinnedCoords[, 1]

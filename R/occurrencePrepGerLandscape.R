@@ -22,7 +22,12 @@
 #' @param species Character vector of Latin species names to process.
 #' @param landscapeYears Integer vector of years to process.
 #' @param localeCtype Character. Locale for German special characters.
-#' @param thinDist Numeric. Spatial thinning distance in metres.
+#' @param thinDist Numeric. Default spatial thinning distance in metres, used
+#'   for any species without its own entry in `perSpeciesThinDist`.
+#' @param perSpeciesThinDist Named numeric vector/list, or NULL (default).
+#'   Per-species thinning distance overrides, keyed by species Latin name --
+#'   e.g. sourced from `speciesConfig_general.csv`'s `thinning_dist_m`
+#'   column (landscape rows) via `loadSpeciesGeneralConfig()`.
 #' @param useThinning Logical. Should occurrence points be spatially thinned?
 #'   Does NOT restore abundance data when FALSE -- `Reviere` (territory count)
 #'   is already binarized to `Reviere > 0` upstream of thinning.
@@ -31,7 +36,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         probeflaechenShpPath, landscapeOutputDir,
                                         habitatOutputDir, outputDir, species,
                                         landscapeYears, localeCtype = "de_DE.UTF-8",
-                                        thinDist = 2000, useThinning = TRUE) {
+                                        thinDist = 2000, perSpeciesThinDist = NULL,
+                                        useThinning = TRUE) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
@@ -158,10 +164,15 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       }
 
       if (useThinning) {
-        message("  Thinning at ", thinDist / 1000, "km...")
+        spThinDist <- if (!is.null(perSpeciesThinDist) && spLatin %in% names(perSpeciesThinDist)) {
+          perSpeciesThinDist[[spLatin]]
+        } else {
+          thinDist
+        }
+        message("  Thinning at ", spThinDist / 1000, "km...")
         spSf <- sf::st_as_sf(spYrEnv, coords = c("x", "y"), crs = 3035)
 
-        spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
+        spThinned <- thin(spSf, thinDist = spThinDist, runs = 5)
         thinnedCoords <- sf::st_coordinates(spThinned)
         spThinnedDf <- sf::st_drop_geometry(spThinned)
         spThinnedDf$x <- thinnedCoords[, 1]

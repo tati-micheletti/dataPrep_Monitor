@@ -13,14 +13,19 @@
 #'   (produced by `prepareClimateData()`).
 #' @param outputDir Character. Directory to save per-species RDS files in.
 #' @param species Character vector of Latin species names to process.
-#' @param thinDist Numeric. Spatial thinning distance in metres.
+#' @param thinDist Numeric. Default spatial thinning distance in metres, used
+#'   for any species without its own entry in `perSpeciesThinDist`.
+#' @param perSpeciesThinDist Named numeric vector/list, or NULL (default).
+#'   Per-species thinning distance overrides, keyed by species Latin name --
+#'   e.g. sourced from `speciesConfig_general.csv`'s `thinning_dist_m`
+#'   column (climate rows) via `loadSpeciesGeneralConfig()`.
 #' @param useThinning Logical. Should occurrence points be spatially thinned?
 #'   Does NOT restore abundance data when FALSE -- EBBA2 is a presence/absence
 #'   atlas regardless of thinning.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                   outputDir, species, thinDist = 100000,
-                                  useThinning = TRUE) {
+                                  perSpeciesThinDist = NULL, useThinning = TRUE) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
 
@@ -121,10 +126,15 @@ occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
             sum(spPaEnv$occurrence == 0), " abs)")
 
     if (useThinning) {
-      message("    Spatial thinning at ", thinDist / 1000, "km...")
+      spThinDist <- if (!is.null(perSpeciesThinDist) && sp %in% names(perSpeciesThinDist)) {
+        perSpeciesThinDist[[sp]]
+      } else {
+        thinDist
+      }
+      message("    Spatial thinning at ", spThinDist / 1000, "km...")
       spSf <- sf::st_as_sf(spPaEnv, coords = c("x", "y"), crs = terra::crs(bioclim))
 
-      spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
+      spThinned <- thin(spSf, thinDist = spThinDist, runs = 5)
       thinnedCoords <- sf::st_coordinates(spThinned)
       spThinnedDf <- sf::st_drop_geometry(spThinned)
       spThinnedDf$x <- thinnedCoords[, 1]

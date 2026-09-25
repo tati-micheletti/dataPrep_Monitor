@@ -144,7 +144,23 @@ defineModule(sim, list(
                     "Default 400 (2x the 200m habitat resolution)."),
     defineParameter("thinDistLandscapeM", "numeric", 2000, NA, NA,
                     "Spatial thinning distance (m) at the German landscape scale.",
-                    "Default 2000 (2x the 1km landscape resolution).")
+                    "Default 2000 (2x the 1km landscape resolution)."),
+    defineParameter("perSpeciesThinDist", "list", NULL, NA, NA,
+                    "NULL (default): every species uses the shared thinDist*M parameters",
+                    "above at every scale. Otherwise a named list, species -> scale ->",
+                    "numeric, overriding the thinning distance for just that species+scale.",
+                    "Sourced from speciesConfig_general.csv's thinning_dist_m column (repo",
+                    "root) via loadSpeciesGeneralConfig() in sharedSpeciesConfig.R -- resolved",
+                    "once by runMe.R/the orchestrating script and passed in as a plain value,",
+                    "same pattern as sharedConfig.R's other shared values."),
+    defineParameter("brutzeitcodeFilter", "character", NULL, NA, NA,
+                    "NULL (default): no ATLAS_CODE filtering beyond occurrencePrepGerHabitat()'s",
+                    "existing global filter (already excludes the weakest \"A\"-with-no-number",
+                    "tier for everyone). Otherwise a named list, species -> ATLAS_CODE prefix",
+                    "(e.g. \"C\" for confirmed-breeding-only), applied ON TOP of that global",
+                    "filter for just the named species. Habitat scale only -- DDA territories/",
+                    "MhB-landscape data has no ATLAS_CODE. Sourced from",
+                    "speciesConfig_general.csv's brutzeitcode_filter column (habitat rows).")
   ),
   inputObjects = bindrows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
@@ -292,7 +308,9 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           useThinning = P(sim)$useSpatialThinning,
           thinDistEuropeM = P(sim)$thinDistEuropeM,
           thinDistHabitatM = P(sim)$thinDistHabitatM,
-          thinDistLandscapeM = P(sim)$thinDistLandscapeM)
+          thinDistLandscapeM = P(sim)$thinDistLandscapeM,
+          perSpeciesThinDist = P(sim)$perSpeciesThinDist,
+          brutzeitcodeFilter = P(sim)$brutzeitcodeFilter)
       }
       # ! ----- STOP EDITING ----- ! #
     },

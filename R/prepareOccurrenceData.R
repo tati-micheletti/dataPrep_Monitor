@@ -31,6 +31,14 @@
 #'   German habitat scale. Default 400 (2x the 200m habitat resolution).
 #' @param thinDistLandscapeM Numeric. Spatial thinning distance (m) at the
 #'   German landscape scale. Default 2000 (2x the 1km landscape resolution).
+#' @param perSpeciesThinDist Named list, or NULL (default). species -> scale ->
+#'   numeric, per-species thinning distance overrides -- e.g. sourced from
+#'   `speciesConfig_general.csv`'s `thinning_dist_m` column via
+#'   `loadSpeciesGeneralConfig()`. A species/scale without an entry uses that
+#'   scale's `thinDist*M` default above.
+#' @param brutzeitcodeFilter Named character vector/list, or NULL (default).
+#'   Per-species ATLAS_CODE prefix filter (habitat scale only) -- see
+#'   `occurrencePrepGerHabitat()`'s docstring.
 #' @return Invisibly, a list with `europe`, `gerHabitat`, and
 #'   `gerLandscape` output file path vectors.
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
@@ -40,7 +48,14 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    occurrenceOutputDir, species, habitatYears,
                                    landscapeYears, localeCtype = "de_DE.UTF-8",
                                    useThinning = TRUE, thinDistEuropeM = 100000,
-                                   thinDistHabitatM = 400, thinDistLandscapeM = 2000) {
+                                   thinDistHabitatM = 400, thinDistLandscapeM = 2000,
+                                   perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL) {
+
+  extractScale <- function(nested, scale) {
+    if (is.null(nested)) return(NULL)
+    out <- lapply(nested, function(sp) sp[[scale]])
+    out[!sapply(out, is.null)]
+  }
 
   europeFiles <- occurrencePrepEurope(
     ebba2CSVPath = ebba2CSVPath,
@@ -49,7 +64,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     outputDir = file.path(occurrenceOutputDir, "ornitho"),
     species = species,
     useThinning = useThinning,
-    thinDist = thinDistEuropeM)
+    thinDist = thinDistEuropeM,
+    perSpeciesThinDist = extractScale(perSpeciesThinDist, "climate"))
 
   gerHabitatFiles <- occurrencePrepGerHabitat(
     mhbObsPath = mhbObsPath,
@@ -60,7 +76,9 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     habitatYears = habitatYears,
     localeCtype = localeCtype,
     useThinning = useThinning,
-    thinDist = thinDistHabitatM)
+    thinDist = thinDistHabitatM,
+    perSpeciesThinDist = extractScale(perSpeciesThinDist, "habitat"),
+    brutzeitcodeFilter = brutzeitcodeFilter)
 
   gerLandscapeFiles <- occurrencePrepGerLandscape(
     ddaTerritoriesXlsxPath = ddaTerritoriesXlsxPath,
@@ -73,7 +91,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     landscapeYears = landscapeYears,
     localeCtype = localeCtype,
     useThinning = useThinning,
-    thinDist = thinDistLandscapeM)
+    thinDist = thinDistLandscapeM,
+    perSpeciesThinDist = extractScale(perSpeciesThinDist, "landscape"))
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,
