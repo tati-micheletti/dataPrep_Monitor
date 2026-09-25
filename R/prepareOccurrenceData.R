@@ -39,6 +39,11 @@
 #' @param brutzeitcodeFilter Named character vector/list, or NULL (default).
 #'   Per-species ATLAS_CODE prefix filter (habitat scale only) -- see
 #'   `occurrencePrepGerHabitat()`'s docstring.
+#' @param perSpeciesDataSource Named character vector/list, or NULL (default,
+#'   every species uses DDA territories at landscape scale). species ->
+#'   `"DDA territories"`/`"MhB point counts"` -- see
+#'   `occurrencePrepGerLandscape()`'s docstring. A species using `"MhB point
+#'   counts"` here is routed through `mhbObsPath` at landscape scale too.
 #' @return Invisibly, a list with `europe`, `gerHabitat`, and
 #'   `gerLandscape` output file path vectors.
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
@@ -49,7 +54,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    landscapeYears, localeCtype = "de_DE.UTF-8",
                                    useThinning = TRUE, thinDistEuropeM = 100000,
                                    thinDistHabitatM = 400, thinDistLandscapeM = 2000,
-                                   perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL) {
+                                   perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL,
+                                   perSpeciesDataSource = NULL) {
 
   extractScale <- function(nested, scale) {
     if (is.null(nested)) return(NULL)
@@ -92,7 +98,9 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     localeCtype = localeCtype,
     useThinning = useThinning,
     thinDist = thinDistLandscapeM,
-    perSpeciesThinDist = extractScale(perSpeciesThinDist, "landscape"))
+    perSpeciesThinDist = extractScale(perSpeciesThinDist, "landscape"),
+    mhbObsPath = mhbObsPath,
+    perSpeciesDataSource = perSpeciesDataSource)
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,

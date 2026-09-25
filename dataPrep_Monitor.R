@@ -158,9 +158,20 @@ defineModule(sim, list(
                     "existing global filter (already excludes the weakest \"A\"-with-no-number",
                     "tier for everyone). Otherwise a named list, species -> ATLAS_CODE prefix",
                     "(e.g. \"C\" for confirmed-breeding-only), applied ON TOP of that global",
-                    "filter for just the named species. Habitat scale only -- DDA territories/",
-                    "MhB-landscape data has no ATLAS_CODE. Sourced from",
-                    "speciesConfig_general.csv's brutzeitcode_filter column (habitat rows).")
+                    "filter for just the named species. Only a per-species OVERRIDE at habitat",
+                    "scale -- occurrencePrepGerLandscape()'s MhB-routed species (see",
+                    "perSpeciesDataSource below) use a fixed baseline ATLAS_CODE filter, not a",
+                    "per-species one; DDA-territories-routed species have no ATLAS_CODE at all.",
+                    "Sourced from speciesConfig_general.csv's brutzeitcode_filter column",
+                    "(habitat rows)."),
+    defineParameter("perSpeciesDataSource", "character", NULL, NA, NA,
+                    "NULL (default): every species uses DDA territories at landscape scale.",
+                    "Otherwise a named list, species -> \"DDA territories\"/\"MhB point counts\" --",
+                    "a species set to \"MhB point counts\" is routed through the raw MhB CSV at",
+                    "landscape scale too (route-level presence/absence instead of DDA's",
+                    "territory counts) -- see occurrencePrepGerLandscape()'s docstring and",
+                    "DECISIONS.md. Sourced from speciesConfig_general.csv's data_source column",
+                    "(landscape rows).")
   ),
   inputObjects = bindrows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
@@ -310,7 +321,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           thinDistHabitatM = P(sim)$thinDistHabitatM,
           thinDistLandscapeM = P(sim)$thinDistLandscapeM,
           perSpeciesThinDist = P(sim)$perSpeciesThinDist,
-          brutzeitcodeFilter = P(sim)$brutzeitcodeFilter)
+          brutzeitcodeFilter = P(sim)$brutzeitcodeFilter,
+          perSpeciesDataSource = P(sim)$perSpeciesDataSource)
       }
       # ! ----- STOP EDITING ----- ! #
     },
