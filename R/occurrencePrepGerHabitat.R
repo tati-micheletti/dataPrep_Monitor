@@ -48,8 +48,6 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
 
-  lookup <- speciesLookup()
-
   # Reference raster: solar radiation at 200m -- has the most NAs at
   # borders, giving a conservative exclusion of edge cells with
   # incomplete covariate data. Following Wiedenroth et al.
@@ -67,13 +65,18 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                    year = as.integer(format(date, "%Y")),
                    month = format(date, "%m"))
 
-  focalGerman <- lookup$german[lookup$latin %in% species]
+  message("Filtering to ", length(habitatYears), " years, ", length(species), " species...")
 
-  message("Filtering to ", length(habitatYears), " years, ", length(focalGerman), " species...")
-
+  # Filters directly on the raw MhB CSV's own SPECIES_NAME_SCIENTIFIC column
+  # (it has both German and scientific names natively) -- deliberately NOT
+  # routed through a Latin<->German lookup at all, unlike landscape scale
+  # (occurrencePrepGerLandscape(), which has no choice: the raw DDA data has
+  # no Latin-name column). One less place a name-lookup mismatch can
+  # silently drop a species (see speciesCanonical.csv's docstring for the
+  # 2026-09-26 incident this simplification is a direct response to).
   df <- mhbRaw |>
     dplyr::filter(year %in% habitatYears,
-                   SPECIES_NAME_GERMAN %in% focalGerman,
+                   SPECIES_NAME_SCIENTIFIC %in% species,
                    TOTAL_COUNT > 0,
                    month %in% c("04", "05", "06"),
                    ATLAS_CODE %in% c("A1", "A2",
@@ -81,11 +84,10 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       "C10", "C11a", "C11b", "C12", "C13a", "C13b",
                                       "C14a", "C14b", "C15", "C16")) |>
     dplyr::mutate(AREA_NATIONAL_CODE = tolower(AREA_NATIONAL_CODE)) |>
-    dplyr::left_join(lookup, by = c("SPECIES_NAME_GERMAN" = "german")) |>
-    dplyr::rename(latin_name = latin)
+    dplyr::rename(latin_name = SPECIES_NAME_SCIENTIFIC)
 
   message("Records after filtering: ", nrow(df))
-  message("Species: ", paste(unique(df$SPECIES_NAME_GERMAN), collapse = ", "))
+  message("Species: ", paste(unique(df$latin_name), collapse = ", "))
   message("Years: ", paste(sort(unique(df$year)), collapse = ", "))
 
   message("\nLoading Probeflaechen shapefile...")

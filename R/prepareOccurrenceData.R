@@ -44,6 +44,12 @@
 #'   `"DDA territories"`/`"MhB point counts"` -- see
 #'   `occurrencePrepGerLandscape()`'s docstring. A species using `"MhB point
 #'   counts"` here is routed through `mhbObsPath` at landscape scale too.
+#' @param germanNames Named character vector, `species` -> German name --
+#'   required (landscape scale only; habitat scale filters MhB directly by
+#'   scientific name and needs no German name at all). Sourced from
+#'   `speciesCanonical.csv` via `canonicalGermanNames()` in
+#'   `sharedSpeciesCanonical.R` -- see `occurrencePrepGerLandscape()`'s
+#'   docstring for the full rationale.
 #' @return Invisibly, a list with `europe`, `gerHabitat`, and
 #'   `gerLandscape` output file path vectors.
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
@@ -55,7 +61,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    useThinning = TRUE, thinDistEuropeM = 100000,
                                    thinDistHabitatM = 400, thinDistLandscapeM = 2000,
                                    perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL,
-                                   perSpeciesDataSource = NULL) {
+                                   perSpeciesDataSource = NULL, germanNames) {
 
   extractScale <- function(nested, scale) {
     if (is.null(nested)) return(NULL)
@@ -100,7 +106,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     thinDist = thinDistLandscapeM,
     perSpeciesThinDist = extractScale(perSpeciesThinDist, "landscape"),
     mhbObsPath = mhbObsPath,
-    perSpeciesDataSource = perSpeciesDataSource)
+    perSpeciesDataSource = perSpeciesDataSource,
+    germanNames = germanNames)
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,

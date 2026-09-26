@@ -171,7 +171,16 @@ defineModule(sim, list(
                     "landscape scale too (route-level presence/absence instead of DDA's",
                     "territory counts) -- see occurrencePrepGerLandscape()'s docstring and",
                     "DECISIONS.md. Sourced from speciesConfig_general.csv's data_source column",
-                    "(landscape rows).")
+                    "(landscape rows)."),
+    defineParameter("germanNames", "character", NULL, NA, NA,
+                    "Named character vector, species -> German name -- REQUIRED (landscape",
+                    "scale has no other way to identify species in the raw DDA data, which has",
+                    "no Latin-name column at all). Sourced from speciesCanonical.csv (repo root)",
+                    "via canonicalGermanNames() in sharedSpeciesCanonical.R -- the single",
+                    "canonical name lookup; resolved once by runMe.R/the orchestrating script",
+                    "and passed in as a plain value, same pattern as sharedConfig.R's other",
+                    "shared values. See sharedSpeciesCanonical.R's docstring for why this",
+                    "replaced the old, separately maintained speciesLookup().")
   ),
   inputObjects = bindrows(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
@@ -322,7 +331,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           thinDistLandscapeM = P(sim)$thinDistLandscapeM,
           perSpeciesThinDist = P(sim)$perSpeciesThinDist,
           brutzeitcodeFilter = P(sim)$brutzeitcodeFilter,
-          perSpeciesDataSource = P(sim)$perSpeciesDataSource)
+          perSpeciesDataSource = P(sim)$perSpeciesDataSource,
+          germanNames = P(sim)$germanNames)
       }
       # ! ----- STOP EDITING ----- ! #
     },

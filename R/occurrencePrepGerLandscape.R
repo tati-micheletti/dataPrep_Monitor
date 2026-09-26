@@ -50,6 +50,14 @@
 #'   every species uses DDA territories). species -> `"DDA territories"`/
 #'   `"MhB point counts"` -- e.g. sourced from `speciesConfig_general.csv`'s
 #'   `data_source` column (landscape rows) via `loadSpeciesGeneralConfig()`.
+#' @param germanNames Named character vector, `species` -> German name --
+#'   required (both the raw DDA territories data and the raw MhB CSV's
+#'   `SPECIES_NAME_GERMAN` column identify species in German only, no Latin
+#'   text column DDA can be filtered on directly). Sourced from
+#'   `speciesCanonical.csv` (repo root) via `canonicalGermanNames()` in
+#'   `sharedSpeciesCanonical.R` -- the single canonical name lookup, see
+#'   that file's docstring for why this replaced the old, separately
+#'   maintained `speciesLookup()`.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath,
                                         probeflaechenShpPath, landscapeOutputDir,
@@ -57,12 +65,22 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         landscapeYears, localeCtype = "de_DE.UTF-8",
                                         thinDist = 2000, perSpeciesThinDist = NULL,
                                         useThinning = TRUE, mhbObsPath = NULL,
-                                        perSpeciesDataSource = NULL) {
+                                        perSpeciesDataSource = NULL, germanNames) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
 
-  lookup <- speciesLookup()
+  missingGerman <- setdiff(species, names(germanNames))
+  if (length(missingGerman) > 0) {
+    stop("occurrencePrepGerLandscape(): no germanNames entry for: ",
+         paste(missingGerman, collapse = ", "), " -- every species passed in `species` ",
+         "must have a German name (see speciesCanonical.csv).")
+  }
+  # Reproduces speciesLookup()'s old data.frame shape (german/latin columns)
+  # so the rest of this function -- written against that shape -- needs no
+  # further changes beyond this one substitution.
+  lookup <- data.frame(german = unname(germanNames[species]), latin = species,
+                        stringsAsFactors = FALSE)
 
   mhbRoutedSpecies <- if (!is.null(perSpeciesDataSource)) {
     intersect(species, names(perSpeciesDataSource)[unlist(perSpeciesDataSource) == "MhB point counts"])

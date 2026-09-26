@@ -104,6 +104,18 @@ occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
       dplyr::filter(birdlife_scientific_name == sp, occurrence == 1)
     message("    Presences: ", nrow(spOcc))
 
+    if (nrow(spOcc) < 10) {
+      warning("Too few presences (", nrow(spOcc), ") for ", sp, " at Europe/climate scale -- ",
+              "skipping. This is very likely a data gap (e.g. this species missing from the raw ",
+              "EBBA2 extract entirely), not something a re-run will fix on its own -- check ",
+              "'Species found' in this function's earlier log output against `species` above. ",
+              "Proceeding anyway would silently build an all-absence table, which cannot be ",
+              "fitted at all downstream (dismo::gbm.step() has no way to converge on a response ",
+              "with zero variance -- confirmed to loop forever in optimizeBRT() prior to its own ",
+              "minLR safety net being added, 2026-09-26).")
+      next
+    }
+
     spEnv <- cbind(spOcc, terra::extract(bioclim, spOcc[, c("x", "y")], cells = TRUE))
     spEnv <- spEnv[!is.na(spEnv$bio1), ]
 
