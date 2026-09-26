@@ -5,13 +5,13 @@ speciesLookup <- function() {
   data.frame(
     german = c("Feldlerche", "Goldammer", "Neuntöter", "Heidelerche",
                "Grauammer", "Rotmilan", "Braunkehlchen", "Kiebitz",
-               "Mäusebussard", "Star", "Rebhuhn"),
+               "Mäusebussard", "Star", "Rebhuhn", "Wiesenpieper"),
     latin = c("Alauda arvensis", "Emberiza citrinella",
               "Lanius collurio", "Lullula arborea",
               "Emberiza calandra", "Milvus milvus",
               "Saxicola rubetra", "Vanellus vanellus",
               "Buteo buteo", "Sturnus vulgaris",
-              "Perdix perdix"),
+              "Perdix perdix", "Anthus pratensis"),
     stringsAsFactors = FALSE
   )
 }
