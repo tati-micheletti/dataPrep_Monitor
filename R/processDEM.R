@@ -119,7 +119,7 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
     message("\n  --- ", toupper(scaleName), " scale (", scaleCfg$res, "m) ---")
 
     for (layerName in names(derivatives)) {
-      outFile <- file.path(scaleCfg$dir, paste0(layerName, "_", scaleName, ".tif"))
+      outFile <- file.path(scaleCfg$dir, paste0(layerName, "_", scaleName, "_", basename(scaleCfg$dir), ".tif"))
       if (file.exists(outFile)) {
         r <- terra::rast(outFile)
         vals <- terra::values(r, na.rm = TRUE)

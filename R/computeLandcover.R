@@ -24,8 +24,12 @@ computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
     stop("CORINE file not found: ", rawFile)
   }
 
-  outHabitat <- file.path(habitatOutputDir, paste0("landcover_", corineYear, "_habitat.tif"))
-  outLandscape <- file.path(landscapeOutputDir, paste0("landcover_", corineYear, "_landscape.tif"))
+  # Resolution appended to the filename itself (second safety layer beyond
+  # the containing scaleLabel()-named folder) -- see aggregateAndSave.R.
+  outHabitat <- file.path(habitatOutputDir,
+                           paste0("landcover_", corineYear, "_habitat_", basename(habitatOutputDir), ".tif"))
+  outLandscape <- file.path(landscapeOutputDir,
+                             paste0("landcover_", corineYear, "_landscape_", basename(landscapeOutputDir), ".tif"))
 
   # Independent per-scale cache check (Lisa Hildebrand's v2 pattern) -- a
   # scale whose cached output is already valid is skipped even when the

@@ -305,10 +305,13 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$occurrenceData) || P(sim)$rerunOccurrenceData) {
         windowStart <- P(sim)$ebba2TrainingYear - (P(sim)$climateWindowLength - 1)
+        climateLabel <- scaleLabel(P(sim)$climateResolutionM)
+        # Resolution appended to the filename (second safety layer beyond
+        # the containing scaleLabel()-named folder).
         bioclimTrainingFile <- file.path(inputPath(sim), "predictors", "processed",
-                                          scaleLabel(P(sim)$climateResolutionM),
+                                          climateLabel,
                                           paste0("bioclim_", windowStart, "-",
-                                                 P(sim)$ebba2TrainingYear, ".tif"))
+                                                 P(sim)$ebba2TrainingYear, "_", climateLabel, ".tif"))
 
         sim$occurrenceData <- prepareOccurrenceData(
           ebba2CSVPath = file.path(inputPath(sim), P(sim)$ebba2CSVSubpath),

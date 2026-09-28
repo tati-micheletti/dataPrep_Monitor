@@ -24,7 +24,10 @@ computeBioclimYear <- function(targetYear, windowLength, climateOutputDir,
   startYr <- min(windowYears)
   endYr <- max(windowYears)
 
-  outFile <- file.path(climateOutputDir, paste0("bioclim_", startYr, "-", endYr, ".tif"))
+  # Resolution appended to the filename itself (second safety layer beyond
+  # the containing scaleLabel()-named folder) -- see aggregateAndSave.R.
+  outFile <- file.path(climateOutputDir,
+                        paste0("bioclim_", startYr, "-", endYr, "_", basename(climateOutputDir), ".tif"))
 
   if (isValidRasterFile(outFile)) {
     r <- terra::rast(outFile)

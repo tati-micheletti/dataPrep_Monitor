@@ -47,8 +47,12 @@ computeLanduse <- function(year, landuseRawDir, habitatOutputDir,
   categories <- scheme$cats
   hasHedges <- scheme$has_hedges
 
-  outHabitat <- file.path(habitatOutputDir, paste0("landuse_", year, "_habitat.tif"))
-  outLandscape <- file.path(landscapeOutputDir, paste0("landuse_", year, "_landscape.tif"))
+  # Resolution appended to the filename itself (second safety layer beyond
+  # the containing scaleLabel()-named folder) -- see aggregateAndSave.R.
+  outHabitat <- file.path(habitatOutputDir,
+                           paste0("landuse_", year, "_habitat_", basename(habitatOutputDir), ".tif"))
+  outLandscape <- file.path(landscapeOutputDir,
+                             paste0("landuse_", year, "_landscape_", basename(landscapeOutputDir), ".tif"))
 
   # Independent per-scale cache check (Lisa Hildebrand's v2 pattern) -- a
   # scale whose cached output is already valid is skipped even when the

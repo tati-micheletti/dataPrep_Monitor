@@ -5,9 +5,9 @@
 #' presences/absences per route x year x species, spatially thins at
 #' 400m, extracts habitat covariates, and saves one RDS per species/year.
 #'
-#' NOTE: expects `landcover_<corineYear>_habitat.tif` to already exist in
-#' `habitatOutputDir` -- CORINE land cover processing is out of scope for
-#' this module and must be supplied separately.
+#' NOTE: expects `landcover_<corineYear>_habitat_<scaleLabel>.tif` to
+#' already exist in `habitatOutputDir` -- CORINE land cover processing is
+#' out of scope for this module and must be supplied separately.
 #'
 #' Follows Wiedenroth et al. 03a_occurrence-prep_200m.R with adaptations
 #' for multi-year data.
@@ -59,7 +59,10 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   # Reference raster: solar radiation at 200m -- has the most NAs at
   # borders, giving a conservative exclusion of edge cells with
   # incomplete covariate data. Following Wiedenroth et al.
-  refRaster <- terra::rast(file.path(habitatOutputDir, "solar_radiation_habitat.tif"))
+  # Resolution appended to the filename (second safety layer beyond the
+  # containing scaleLabel()-named folder, habitatOutputDir itself).
+  refRaster <- terra::rast(file.path(habitatOutputDir,
+                                      paste0("solar_radiation_habitat_", basename(habitatOutputDir), ".tif")))
   message("Reference raster (200m solar radiation):")
   message("CRS: ", terra::crs(refRaster, describe = TRUE)$code)
   message("Resolution: ", paste(terra::res(refRaster), collapse = " x "), "m")
@@ -197,12 +200,15 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
 #' @return SpatRaster, or NULL if required files are missing.
 buildHabitatCovStackOneYear <- function(yr, habitatOutputDir) {
   corineYr <- corineYear(yr)
+  # Resolution appended to every filename below (second safety layer beyond
+  # the containing scaleLabel()-named folder, habitatOutputDir itself).
+  resSuffix <- basename(habitatOutputDir)
 
-  lcFile <- file.path(habitatOutputDir, paste0("landcover_", corineYr, "_habitat.tif"))
-  luFile <- file.path(habitatOutputDir, paste0("landuse_", yr, "_habitat.tif"))
-  demFiles <- c(file.path(habitatOutputDir, "elevation_habitat.tif"),
-                file.path(habitatOutputDir, "slope_habitat.tif"),
-                file.path(habitatOutputDir, "solar_radiation_habitat.tif"))
+  lcFile <- file.path(habitatOutputDir, paste0("landcover_", corineYr, "_habitat_", resSuffix, ".tif"))
+  luFile <- file.path(habitatOutputDir, paste0("landuse_", yr, "_habitat_", resSuffix, ".tif"))
+  demFiles <- c(file.path(habitatOutputDir, paste0("elevation_habitat_", resSuffix, ".tif")),
+                file.path(habitatOutputDir, paste0("slope_habitat_", resSuffix, ".tif")),
+                file.path(habitatOutputDir, paste0("solar_radiation_habitat_", resSuffix, ".tif")))
 
   missingFiles <- c(lcFile, luFile, demFiles)[!file.exists(c(lcFile, luFile, demFiles))]
   if (length(missingFiles) > 0) {
@@ -235,7 +241,7 @@ buildHabitatCovStackOneYear <- function(yr, habitatOutputDir) {
       if (!is.null(refYear)) {
         message("Hedges NA -- backfilling from ", refYear)
         luRefYr <- terra::rast(file.path(habitatOutputDir,
-                                          paste0("landuse_", refYear, "_habitat.tif")))
+                                          paste0("landuse_", refYear, "_habitat_", resSuffix, ".tif")))
         hedgeRef <- luRefYr[["hedges"]]
         hedgeRef <- terra::resample(hedgeRef, covStack[[1]], method = "bilinear")
         names(hedgeRef) <- hedgeCol

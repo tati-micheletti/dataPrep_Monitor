@@ -12,7 +12,13 @@
 aggregateAndSave <- function(rast30m, scaleName, layerName, outputDir,
                               targetResM, targetCRS, force = FALSE) {
 
-  outFile <- file.path(outputDir, paste0(layerName, "_", scaleName, ".tif"))
+  # Resolution appended to the filename itself (not just the containing
+  # scaleLabel()-named folder) as a second, redundant safety layer -- if a
+  # file is ever copied/moved out of its folder, its own name still says
+  # what resolution it actually is. Derived from outputDir's own basename
+  # (already the scaleLabel() string, e.g. "scale_02") rather than a new
+  # parameter, so this can't drift from the folder it's actually saved in.
+  outFile <- file.path(outputDir, paste0(layerName, "_", scaleName, "_", basename(outputDir), ".tif"))
 
   if (!force && isValidRasterFile(outFile)) {
     message("  Cache hit: ", basename(outFile))
