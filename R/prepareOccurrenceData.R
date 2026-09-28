@@ -36,9 +36,13 @@
 #'   `speciesConfig_general.csv`'s `thinning_dist_m` column via
 #'   `loadSpeciesGeneralConfig()`. A species/scale without an entry uses that
 #'   scale's `thinDist*M` default above.
-#' @param brutzeitcodeFilter Named character vector/list, or NULL (default).
-#'   Per-species ATLAS_CODE prefix filter (habitat scale only) -- see
-#'   `occurrencePrepGerHabitat()`'s docstring.
+#' @param brutzeitcodeFilter Named list, or NULL (default). species -> scale ->
+#'   ATLAS_CODE prefix, e.g. sourced from `speciesConfig_general.csv`'s
+#'   `brutzeitcode_filter` column via `loadSpeciesGeneralConfig()` (same
+#'   nesting shape as `perSpeciesThinDist`). Only "habitat" and "landscape"
+#'   scales are meaningful (landscape only for MhB-routed species -- see
+#'   `occurrencePrepGerLandscape()`'s docstring); a species+scale with no
+#'   entry gets no filter at that scale.
 #' @param perSpeciesDataSource Named character vector/list, or NULL (default,
 #'   every species uses DDA territories at landscape scale). species ->
 #'   `"DDA territories"`/`"MhB point counts"` -- see
@@ -90,7 +94,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     useThinning = useThinning,
     thinDist = thinDistHabitatM,
     perSpeciesThinDist = extractScale(perSpeciesThinDist, "habitat"),
-    brutzeitcodeFilter = brutzeitcodeFilter)
+    brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "habitat"))
 
   gerLandscapeFiles <- occurrencePrepGerLandscape(
     ddaTerritoriesXlsxPath = ddaTerritoriesXlsxPath,
@@ -107,7 +111,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     perSpeciesThinDist = extractScale(perSpeciesThinDist, "landscape"),
     mhbObsPath = mhbObsPath,
     perSpeciesDataSource = perSpeciesDataSource,
-    germanNames = germanNames)
+    germanNames = germanNames,
+    brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "landscape"))
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,

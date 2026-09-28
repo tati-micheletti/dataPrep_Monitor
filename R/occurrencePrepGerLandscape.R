@@ -46,6 +46,16 @@
 #' @param mhbObsPath Character, or NULL (default). Path to the raw MhB point
 #'   count CSV -- required if any species uses the `"MhB point counts"` data
 #'   source below.
+#' @param brutzeitcodeFilter Named character vector/list, or NULL (default).
+#'   Per-species ATLAS_CODE prefix filter, ONLY meaningful for species in
+#'   `perSpeciesDataSource` marked `"MhB point counts"` (ignored for
+#'   DDA-routed species, which have no ATLAS_CODE at all) -- e.g. sourced
+#'   from `speciesConfig_general.csv`'s `brutzeitcode_filter` column
+#'   (landscape rows) via `loadSpeciesGeneralConfig()`. Narrows which MhB
+#'   detections count as a PRESENCE for that species (same semantics as
+#'   `occurrencePrepGerHabitat()`'s filter of the same name); does NOT
+#'   affect which routes count as "surveyed" for the absence side -- that's
+#'   still any qualifying detection of any MhB-routed species, unfiltered.
 #' @param perSpeciesDataSource Named character vector/list, or NULL (default,
 #'   every species uses DDA territories). species -> `"DDA territories"`/
 #'   `"MhB point counts"` -- e.g. sourced from `speciesConfig_general.csv`'s
@@ -65,7 +75,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         landscapeYears, localeCtype = "de_DE.UTF-8",
                                         thinDist = 2000, perSpeciesThinDist = NULL,
                                         useThinning = TRUE, mhbObsPath = NULL,
-                                        perSpeciesDataSource = NULL, germanNames) {
+                                        perSpeciesDataSource = NULL, germanNames,
+                                        brutzeitcodeFilter = NULL) {
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
@@ -190,7 +201,21 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     presenceRouteYr <- dfMhB |>
       dplyr::filter(SPECIES_NAME_GERMAN %in% focalGermanMhB) |>
       dplyr::left_join(lookup, by = c("SPECIES_NAME_GERMAN" = "german")) |>
-      dplyr::rename(latin_name = latin) |>
+      dplyr::rename(latin_name = latin)
+
+    if (!is.null(brutzeitcodeFilter)) {
+      speciesPrefix <- rep(NA_character_, nrow(presenceRouteYr))
+      known <- presenceRouteYr$latin_name %in% names(brutzeitcodeFilter)
+      speciesPrefix[known] <- unlist(brutzeitcodeFilter)[presenceRouteYr$latin_name[known]]
+      keepRow <- is.na(speciesPrefix) | startsWith(presenceRouteYr$ATLAS_CODE, speciesPrefix)
+      if (any(known)) {
+        message("  ATLAS_CODE filter applied to MhB-routed presences: ",
+                nrow(presenceRouteYr), " -> ", sum(keepRow))
+      }
+      presenceRouteYr <- presenceRouteYr[keepRow, ]
+    }
+
+    presenceRouteYr <- presenceRouteYr |>
       dplyr::distinct(ROUTENCODE, year, latin_name)
 
     allCombosMhB <- tidyr::crossing(surveyedRouteYr, latin_name = mhbRoutedSpecies) |>
