@@ -68,6 +68,14 @@
 #'   `sharedSpeciesCanonical.R` -- the single canonical name lookup, see
 #'   that file's docstring for why this replaced the old, separately
 #'   maintained `speciesLookup()`.
+#' @param cachePath Character, or NULL (default). Directory for
+#'   `reproducible::Cache()`'s per-species-year cache (see
+#'   `buildLandscapeSpeciesYear()`) -- e.g. `cachePath(sim)` when run via
+#'   dataPrep_Monitor, a stable location shared across runs (NOT the
+#'   per-run timestamped output folder), so a config change for one
+#'   species only triggers recompute for that species. NULL falls back to
+#'   a temp directory, for standalone/test calls where persistence across
+#'   sessions doesn't matter.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath,
                                         probeflaechenShpPath, landscapeOutputDir,
@@ -76,7 +84,9 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         thinDist = 2000, perSpeciesThinDist = NULL,
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
-                                        brutzeitcodeFilter = NULL) {
+                                        brutzeitcodeFilter = NULL, cachePath = NULL) {
+
+  if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
@@ -241,6 +251,14 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
   message("\nProcessing ", length(species), " species x ", length(landscapeYears), " years...")
 
+  # Loaded once per year (not once per species-year, as before) -- also
+  # lets its content flow into Cache()'s digest below via `covStack`,
+  # instead of only a directory path (which wouldn't change if the raster
+  # CONTENT changes but the path doesn't).
+  covStacksByYear <- stats::setNames(
+    lapply(landscapeYears, function(yr) loadCovariates(yr, landscapeOutputDir, habitatOutputDir)),
+    as.character(landscapeYears))
+
   outFiles <- list()
 
   for (spLatin in species) {
@@ -248,81 +266,42 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
     message("\n  -- ", spLatin, " --------------------")
 
+    spThinDist <- if (!is.null(perSpeciesThinDist) && spLatin %in% names(perSpeciesThinDist)) {
+      perSpeciesThinDist[[spLatin]]
+    } else {
+      thinDist
+    }
+
     for (yr in landscapeYears) {
 
       outFile <- file.path(outputDir, paste0(spClean, "_landscape_", yr, ".rds"))
 
-      if (isValidRDSFile(outFile)) {
-        message("  Cache hit -- skipping: ", spLatin, " ", yr)
-        outFiles[[paste(spLatin, yr)]] <- outFile
-        next
-      }
-
-      spYr <- occSpatial |>
-        dplyr::filter(latin_name == spLatin, Jahr == as.character(yr))
-
-      nPres <- sum(spYr$occurrence == 1)
-      nAbs <- sum(spYr$occurrence == 0)
-
-      if (nrow(spYr) == 0) {
-        message("  No records for ", spLatin, " ", yr, " -- skipping")
-        next
-      }
-      if (nPres < 10) {
-        warning("  Too few presences (", nPres, ") for ", spLatin, " in ", yr, " -- skipping")
-        next
-      }
-
-      message("  ", spLatin, " ", yr, ": ", nPres, " pres / ", nAbs, " abs")
-
-      covStack <- loadCovariates(yr, landscapeOutputDir, habitatOutputDir)
+      covStack <- covStacksByYear[[as.character(yr)]]
       if (is.null(covStack)) {
         warning("  Covariates unavailable for ", yr, " -- skipping")
         next
       }
 
-      coordsMat <- as.matrix(spYr[, c("x", "y")])
-      envVals <- terra::extract(covStack, coordsMat)
+      # spYr is this species' own subset of the pooled presence/absence
+      # table -- computed here (cheap) rather than inside the cached
+      # helper, so Cache()'s digest only reflects THIS species' actual
+      # data (which already bakes in any brutzeitcodeFilter/
+      # perSpeciesDataSource effect from upstream), not the whole
+      # multi-species occSpatial table. That's what gives per-species
+      # cache selectivity: changing Buteo's config changes Buteo's own
+      # spYr content, leaving every other species' digest untouched.
+      spYr <- occSpatial |>
+        dplyr::filter(latin_name == spLatin, Jahr == as.character(yr))
 
-      spYrEnv <- cbind(spYr, envVals)
+      result <- reproducible::Cache(
+        buildLandscapeSpeciesYear, spLatin = spLatin, yr = yr, spYr = spYr,
+        covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
+        cachePath = cachePath,
+        userTags = c("occurrencePrepGerLandscape", spClean, as.character(yr)))
 
-      nBefore <- nrow(spYrEnv)
-      spYrEnv <- spYrEnv[stats::complete.cases(spYrEnv[, names(covStack)]), ]
-      nAfter <- nrow(spYrEnv)
+      if (is.null(result)) next
 
-      if (nBefore > nAfter) {
-        message("  Removed ", nBefore - nAfter, " rows with NA covariates")
-      }
-
-      if (sum(spYrEnv$occurrence == 1) < 10) {
-        warning("  Too few presences after NA removal for ", spLatin, " ", yr, " -- skipping")
-        next
-      }
-
-      if (useThinning) {
-        spThinDist <- if (!is.null(perSpeciesThinDist) && spLatin %in% names(perSpeciesThinDist)) {
-          perSpeciesThinDist[[spLatin]]
-        } else {
-          thinDist
-        }
-        message("  Thinning at ", spThinDist / 1000, "km...")
-        spSf <- sf::st_as_sf(spYrEnv, coords = c("x", "y"), crs = 3035)
-
-        spThinned <- thin(spSf, thinDist = spThinDist, runs = 5)
-        thinnedCoords <- sf::st_coordinates(spThinned)
-        spThinnedDf <- sf::st_drop_geometry(spThinned)
-        spThinnedDf$x <- thinnedCoords[, 1]
-        spThinnedDf$y <- thinnedCoords[, 2]
-
-        message("  After thinning: ", nrow(spThinnedDf),
-                " (", sum(spThinnedDf$occurrence == 1), " pres / ",
-                sum(spThinnedDf$occurrence == 0), " abs)")
-      } else {
-        message("  Spatial thinning disabled -- keeping all ", nrow(spYrEnv), " rows")
-        spThinnedDf <- spYrEnv
-      }
-
-      saveRDS(spThinnedDf, outFile)
+      saveRDS(result, outFile)
       message("  Saved -> ", outFile)
       outFiles[[paste(spLatin, yr)]] <- outFile
     }
@@ -330,4 +309,77 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
   message("\nDone. Output files in: ", outputDir)
   invisible(unlist(outFiles))
+}
+
+#' Build one species+year's model-ready landscape occurrence table
+#'
+#' The actual per-unit computation `occurrencePrepGerLandscape()` wraps in
+#' `reproducible::Cache()` -- pulled out into its own function so Cache()'s
+#' digest covers exactly `spYr`/`covStack`/`useThinning`/`thinDist` (what
+#' actually determines the result) rather than the whole enclosing
+#' function's environment. Returns NULL (nothing to cache as a "result",
+#' nothing written) for any of the normal "not enough data" skip
+#' conditions -- `occurrencePrepGerLandscape()` treats a NULL return the
+#' same as its old `next` used to.
+#'
+#' @param spLatin Character. Species Latin name (for messages only).
+#' @param yr Integer. Year (for messages only).
+#' @param spYr data.frame. This species+year's own presence/absence rows
+#'   (already filtered from the pooled table), with `x`/`y` columns.
+#' @param covStack SpatRaster. This year's landscape covariate stack.
+#' @param useThinning Logical. Should occurrence points be spatially thinned?
+#' @param thinDist Numeric. This species' resolved thinning distance (m).
+#' @return A data.frame ready to save, or NULL if there isn't enough data.
+buildLandscapeSpeciesYear <- function(spLatin, yr, spYr, covStack, useThinning, thinDist) {
+  nPres <- sum(spYr$occurrence == 1)
+  nAbs <- sum(spYr$occurrence == 0)
+
+  if (nrow(spYr) == 0) {
+    message("  No records for ", spLatin, " ", yr, " -- skipping")
+    return(NULL)
+  }
+  if (nPres < 10) {
+    warning("  Too few presences (", nPres, ") for ", spLatin, " in ", yr, " -- skipping")
+    return(NULL)
+  }
+
+  message("  ", spLatin, " ", yr, ": ", nPres, " pres / ", nAbs, " abs")
+
+  coordsMat <- as.matrix(spYr[, c("x", "y")])
+  envVals <- terra::extract(covStack, coordsMat)
+
+  spYrEnv <- cbind(spYr, envVals)
+
+  nBefore <- nrow(spYrEnv)
+  spYrEnv <- spYrEnv[stats::complete.cases(spYrEnv[, names(covStack)]), ]
+  nAfter <- nrow(spYrEnv)
+
+  if (nBefore > nAfter) {
+    message("  Removed ", nBefore - nAfter, " rows with NA covariates")
+  }
+
+  if (sum(spYrEnv$occurrence == 1) < 10) {
+    warning("  Too few presences after NA removal for ", spLatin, " ", yr, " -- skipping")
+    return(NULL)
+  }
+
+  if (useThinning) {
+    message("  Thinning at ", thinDist / 1000, "km...")
+    spSf <- sf::st_as_sf(spYrEnv, coords = c("x", "y"), crs = 3035)
+
+    spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
+    thinnedCoords <- sf::st_coordinates(spThinned)
+    spThinnedDf <- sf::st_drop_geometry(spThinned)
+    spThinnedDf$x <- thinnedCoords[, 1]
+    spThinnedDf$y <- thinnedCoords[, 2]
+
+    message("  After thinning: ", nrow(spThinnedDf),
+            " (", sum(spThinnedDf$occurrence == 1), " pres / ",
+            sum(spThinnedDf$occurrence == 0), " abs)")
+  } else {
+    message("  Spatial thinning disabled -- keeping all ", nrow(spYrEnv), " rows")
+    spThinnedDf <- spYrEnv
+  }
+
+  spThinnedDf
 }
