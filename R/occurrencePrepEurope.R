@@ -22,10 +22,18 @@
 #' @param useThinning Logical. Should occurrence points be spatially thinned?
 #'   Does NOT restore abundance data when FALSE -- EBBA2 is a presence/absence
 #'   atlas regardless of thinning.
+#' @param cachePath Character, or NULL (default). Directory for
+#'   `reproducible::Cache()`'s per-species cache (see
+#'   `buildEuropeSpecies()`) -- e.g. `cachePath(sim)` when run via
+#'   dataPrep_Monitor, a stable location shared across runs. NULL falls
+#'   back to a temp directory, for standalone/test calls.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                   outputDir, species, thinDist = 100000,
-                                  perSpeciesThinDist = NULL, useThinning = TRUE) {
+                                  perSpeciesThinDist = NULL, useThinning = TRUE,
+                                  cachePath = NULL) {
+
+  if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
 
@@ -92,79 +100,106 @@ occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     spClean <- gsub(" ", "_", sp)
     outFile <- file.path(outputDir, paste0(spClean, "_EBBA2_pa_env.rds"))
 
-    if (isValidRDSFile(outFile)) {
-      message("  Cache hit -- skipping: ", sp)
-      outFiles[[sp]] <- outFile
-      next
-    }
-
-    message("\n  Processing: ", sp)
-
     spOcc <- occJoined |>
       dplyr::filter(birdlife_scientific_name == sp, occurrence == 1)
-    message("    Presences: ", nrow(spOcc))
 
-    if (nrow(spOcc) < 10) {
-      warning("Too few presences (", nrow(spOcc), ") for ", sp, " at Europe/climate scale -- ",
-              "skipping. This is very likely a data gap (e.g. this species missing from the raw ",
-              "EBBA2 extract entirely), not something a re-run will fix on its own -- check ",
-              "'Species found' in this function's earlier log output against `species` above. ",
-              "Proceeding anyway would silently build an all-absence table, which cannot be ",
-              "fitted at all downstream (dismo::gbm.step() has no way to converge on a response ",
-              "with zero variance -- confirmed to loop forever in optimizeBRT() prior to its own ",
-              "minLR safety net being added, 2026-09-26).")
-      next
-    }
-
-    spEnv <- cbind(spOcc, terra::extract(bioclim, spOcc[, c("x", "y")], cells = TRUE))
-    spEnv <- spEnv[!is.na(spEnv$bio1), ]
-
-    # Absences -- surveyed cells where the species was not recorded
-    absenceCells <- setdiff(allEnvClean$cell, spEnv$cell)
-    absences <- allEnvClean |>
-      dplyr::filter(cell %in% absenceCells) |>
-      dplyr::mutate(birdlife_scientific_name = sp,
-                     birdlife_code = unique(spOcc$birdlife_code)[1],
-                     occurrence = 0)
-    message("    Absences: ", nrow(absences))
-
-    keepCols <- c("cell50x50", "birdlife_code", "birdlife_scientific_name",
-                  "occurrence", "x", "y", "cell", names(bioclim))
-
-    spPaEnv <- dplyr::bind_rows(spEnv[, intersect(keepCols, names(spEnv))],
-                                 absences[, intersect(keepCols, names(absences))])
-    message("    Total: ", nrow(spPaEnv),
-            " (", sum(spPaEnv$occurrence == 1), " pres / ",
-            sum(spPaEnv$occurrence == 0), " abs)")
-
-    if (useThinning) {
-      spThinDist <- if (!is.null(perSpeciesThinDist) && sp %in% names(perSpeciesThinDist)) {
-        perSpeciesThinDist[[sp]]
-      } else {
-        thinDist
-      }
-      message("    Spatial thinning at ", spThinDist / 1000, "km...")
-      spSf <- sf::st_as_sf(spPaEnv, coords = c("x", "y"), crs = terra::crs(bioclim))
-
-      spThinned <- thin(spSf, thinDist = spThinDist, runs = 5)
-      thinnedCoords <- sf::st_coordinates(spThinned)
-      spThinnedDf <- sf::st_drop_geometry(spThinned)
-      spThinnedDf$x <- thinnedCoords[, 1]
-      spThinnedDf$y <- thinnedCoords[, 2]
-
-      message("    After thinning: ", nrow(spThinnedDf),
-              " (", sum(spThinnedDf$occurrence == 1), " pres / ",
-              sum(spThinnedDf$occurrence == 0), " abs)")
+    spThinDist <- if (!is.null(perSpeciesThinDist) && sp %in% names(perSpeciesThinDist)) {
+      perSpeciesThinDist[[sp]]
     } else {
-      message("    Spatial thinning disabled -- keeping all ", nrow(spPaEnv), " rows")
-      spThinnedDf <- spPaEnv
+      thinDist
     }
 
-    saveRDS(spThinnedDf, outFile)
+    result <- reproducible::Cache(
+      buildEuropeSpecies, sp = sp, spOcc = spOcc, bioclim = bioclim,
+      allEnvClean = allEnvClean, useThinning = useThinning, thinDist = spThinDist,
+      cachePath = cachePath,
+      userTags = c("occurrencePrepEurope", spClean))
+
+    if (is.null(result)) next
+
+    saveRDS(result, outFile)
     message("    Saved -> ", outFile)
     outFiles[[sp]] <- outFile
   }
 
   message("\nDone. Output files in: ", outputDir)
   invisible(unlist(outFiles))
+}
+
+#' Build one species' model-ready Europe/climate occurrence table
+#'
+#' The actual per-unit computation `occurrencePrepEurope()` wraps in
+#' `reproducible::Cache()` -- see `buildLandscapeSpeciesYear()` in
+#' `occurrencePrepGerLandscape.R` for the rationale. `allEnvClean` (every
+#' surveyed cell's bioclim values, regardless of species) is genuinely
+#' species-independent reference data -- safe to include in every
+#' species' digest, since it only changes when the underlying EBBA2/
+#' bioclim data itself changes (a legitimate reason to invalidate
+#' everyone), not when the `species` argument list changes (unlike
+#' dataPrep_Monitor's habitat/landscape "which routes were surveyed"
+#' values, which ARE filtered by the active species list first).
+#'
+#' @param sp Character. Species Latin name.
+#' @param spOcc data.frame. This species' own presence rows (already
+#'   filtered from `occJoined`).
+#' @param bioclim SpatRaster. Bioclim covariate stack.
+#' @param allEnvClean data.frame. Every surveyed cell's bioclim values.
+#' @param useThinning Logical. Should occurrence points be spatially thinned?
+#' @param thinDist Numeric. This species' resolved thinning distance (m).
+#' @return A data.frame ready to save, or NULL if there isn't enough data.
+buildEuropeSpecies <- function(sp, spOcc, bioclim, allEnvClean, useThinning, thinDist) {
+  message("    Presences: ", nrow(spOcc))
+
+  if (nrow(spOcc) < 10) {
+    warning("Too few presences (", nrow(spOcc), ") for ", sp, " at Europe/climate scale -- ",
+            "skipping. This is very likely a data gap (e.g. this species missing from the raw ",
+            "EBBA2 extract entirely), not something a re-run will fix on its own -- check ",
+            "'Species found' in this function's earlier log output against `species` above. ",
+            "Proceeding anyway would silently build an all-absence table, which cannot be ",
+            "fitted at all downstream (dismo::gbm.step() has no way to converge on a response ",
+            "with zero variance -- confirmed to loop forever in optimizeBRT() prior to its own ",
+            "minLR safety net being added, 2026-09-26).")
+    return(NULL)
+  }
+
+  spEnv <- cbind(spOcc, terra::extract(bioclim, spOcc[, c("x", "y")], cells = TRUE))
+  spEnv <- spEnv[!is.na(spEnv$bio1), ]
+
+  # Absences -- surveyed cells where the species was not recorded
+  absenceCells <- setdiff(allEnvClean$cell, spEnv$cell)
+  absences <- allEnvClean |>
+    dplyr::filter(cell %in% absenceCells) |>
+    dplyr::mutate(birdlife_scientific_name = sp,
+                   birdlife_code = unique(spOcc$birdlife_code)[1],
+                   occurrence = 0)
+  message("    Absences: ", nrow(absences))
+
+  keepCols <- c("cell50x50", "birdlife_code", "birdlife_scientific_name",
+                "occurrence", "x", "y", "cell", names(bioclim))
+
+  spPaEnv <- dplyr::bind_rows(spEnv[, intersect(keepCols, names(spEnv))],
+                               absences[, intersect(keepCols, names(absences))])
+  message("    Total: ", nrow(spPaEnv),
+          " (", sum(spPaEnv$occurrence == 1), " pres / ",
+          sum(spPaEnv$occurrence == 0), " abs)")
+
+  if (useThinning) {
+    message("    Spatial thinning at ", thinDist / 1000, "km...")
+    spSf <- sf::st_as_sf(spPaEnv, coords = c("x", "y"), crs = terra::crs(bioclim))
+
+    spThinned <- thin(spSf, thinDist = thinDist, runs = 5)
+    thinnedCoords <- sf::st_coordinates(spThinned)
+    spThinnedDf <- sf::st_drop_geometry(spThinned)
+    spThinnedDf$x <- thinnedCoords[, 1]
+    spThinnedDf$y <- thinnedCoords[, 2]
+
+    message("    After thinning: ", nrow(spThinnedDf),
+            " (", sum(spThinnedDf$occurrence == 1), " pres / ",
+            sum(spThinnedDf$occurrence == 0), " abs)")
+  } else {
+    message("    Spatial thinning disabled -- keeping all ", nrow(spPaEnv), " rows")
+    spThinnedDf <- spPaEnv
+  }
+
+  spThinnedDf
 }
