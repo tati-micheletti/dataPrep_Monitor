@@ -12,8 +12,14 @@
 #' @param ddaTerritoriesXlsxPath Character. Path to the DDA territories xlsx.
 #' @param ddaVisitsXlsxPath Character. Path to the DDA visited-routes xlsx.
 #' @param probeflaechenShpPath Character. Path to the Probeflaechen shapefile.
-#' @param habitatOutputDir Character. Directory with habitat-scale covariates.
-#' @param landscapeOutputDir Character. Directory with landscape-scale covariates.
+#' @param processedRoot Character. `predictors/processed` directory (without
+#'   the scale_X leaf -- each species' own resolved leaf is appended
+#'   internally by `occurrencePrepGerHabitat()`/`GerLandscape()`).
+#' @param resolutionConfig Named list, species -> scale -> resolution (m), or
+#'   NULL (default). See `dataPrep_Monitor`'s parameter of the same name.
+#' @param sharedHabitatResolutionM,sharedLandscapeResolutionM Numeric. Shared
+#'   default resolutions (m), used for any species absent from
+#'   `resolutionConfig`.
 #' @param occurrenceOutputDir Character. Root directory for occurrence outputs;
 #'   `ornitho/` (EBBA2/European), `MhB/`, and `territories/` (DDA) subfolders
 #'   are created under it.
@@ -63,7 +69,8 @@
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    mhbObsPath, ddaTerritoriesXlsxPath,
                                    ddaVisitsXlsxPath, probeflaechenShpPath,
-                                   habitatOutputDir, landscapeOutputDir,
+                                   processedRoot, resolutionConfig = NULL,
+                                   sharedHabitatResolutionM, sharedLandscapeResolutionM,
                                    occurrenceOutputDir, species, habitatYears,
                                    landscapeYears, localeCtype = "de_DE.UTF-8",
                                    useThinning = TRUE, thinDistEuropeM = 100000,
@@ -92,10 +99,12 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
   gerHabitatFiles <- occurrencePrepGerHabitat(
     mhbObsPath = mhbObsPath,
     probeflaechenShpPath = probeflaechenShpPath,
-    habitatOutputDir = habitatOutputDir,
+    processedRoot = processedRoot,
     outputDir = file.path(occurrenceOutputDir, "MhB"),
     species = species,
     habitatYears = habitatYears,
+    resolutionConfig = resolutionConfig,
+    sharedResolutionM = sharedHabitatResolutionM,
     localeCtype = localeCtype,
     useThinning = useThinning,
     thinDist = thinDistHabitatM,
@@ -107,11 +116,12 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     ddaTerritoriesXlsxPath = ddaTerritoriesXlsxPath,
     ddaVisitsXlsxPath = ddaVisitsXlsxPath,
     probeflaechenShpPath = probeflaechenShpPath,
-    landscapeOutputDir = landscapeOutputDir,
-    habitatOutputDir = habitatOutputDir,
+    processedRoot = processedRoot,
     outputDir = file.path(occurrenceOutputDir, "territories"),
     species = species,
     landscapeYears = landscapeYears,
+    resolutionConfig = resolutionConfig,
+    sharedResolutionM = sharedLandscapeResolutionM,
     localeCtype = localeCtype,
     useThinning = useThinning,
     thinDist = thinDistLandscapeM,

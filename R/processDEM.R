@@ -3,30 +3,31 @@
 #' Builds a virtual mosaic from the downloaded tiles, reprojects to
 #' `targetCRS` at native ~30m, computes elevation/slope/solar radiation
 #' aspect index (trasp, Roberts & Cooper 1989) at 30m, then aggregates
-#' each derivative to habitat and landscape scales.
+#' each derivative to every distinct habitat/landscape resolution
+#' actually needed (usually just one of each -- the shared default -- but
+#' more than one when a species has its own `resolution_m` override; see
+#' DECISIONS.md's 2026-09-28 entry).
 #'
 #' NOTE: solar radiation uses `spatialEco::trasp()` -- a dimensionless
 #' index 0-1, not Wh/m^2.
 #'
 #' @param demRawDir Character. Directory containing downloaded DEM tiles.
 #' @param processedDir Character. Directory for intermediate 30m rasters.
-#' @param habitatOutputDir Character. Directory for habitat-scale outputs.
-#' @param landscapeOutputDir Character. Directory for landscape-scale outputs.
+#' @param processedRoot Character. `predictors/processed` directory
+#'   (without the scale_X leaf -- each resolution's own leaf, via
+#'   `scaleLabel()`, is appended internally).
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
-#' @param habitatResolutionM Numeric. Habitat scale resolution in metres.
-#' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
+#' @param habitatResolutions,landscapeResolutions Numeric vectors. Every
+#'   distinct resolution (m) actually needed at that scale.
 #' @param force Logical. If TRUE, recompute and overwrite every intermediate
 #'   and output step even if a valid cached file already exists (e.g. a bug
 #'   was found in the raw DEM tiles).
-#' @return Invisibly, a named list of output file paths per scale/layer.
-processDEM <- function(demRawDir, processedDir, habitatOutputDir,
-                        landscapeOutputDir, targetCRS,
-                        habitatResolutionM, landscapeResolutionM,
+#' @return Invisibly, a named list of output file paths per scale-entry/layer.
+processDEM <- function(demRawDir, processedDir, processedRoot, targetCRS,
+                        habitatResolutions, landscapeResolutions,
                         force = FALSE) {
 
   dir.create(processedDir, recursive = TRUE, showWarnings = FALSE)
-  dir.create(habitatOutputDir, recursive = TRUE, showWarnings = FALSE)
-  dir.create(landscapeOutputDir, recursive = TRUE, showWarnings = FALSE)
 
   # Step 1: Virtual mosaic
   message("Step 1: Building virtual mosaic from GLO-30 tiles...")
@@ -87,23 +88,33 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
   }
   solar30m <- terra::rast(solar30mPath)
 
-  # Step 4: Aggregate to habitat and landscape scales
+  # Step 4: Aggregate to every distinct resolution actually needed, at
+  # each scale -- usually 2 total (one habitat, one landscape default),
+  # more when a species has its own resolution_m override.
   message("Step 4: Aggregating to habitat and landscape scales...")
 
-  scales <- list(habitat = list(dir = habitatOutputDir, res = habitatResolutionM),
-                 landscape = list(dir = landscapeOutputDir, res = landscapeResolutionM))
+  scales <- c(
+    lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
+    lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r))
+  )
+  scales <- lapply(scales, function(s) {
+    s$dir <- file.path(processedRoot, scaleLabel(s$res))
+    s
+  })
+  names(scales) <- vapply(scales, function(s) paste0(s$scaleName, "_", s$res), character(1))
+  for (s in scales) dir.create(s$dir, recursive = TRUE, showWarnings = FALSE)
 
   derivatives <- list(elevation = dem30m, slope = slope30m, solar_radiation = solar30m)
 
   outFiles <- list()
-  for (scaleName in names(scales)) {
-    scaleCfg <- scales[[scaleName]]
-    message("\n  Scale: ", scaleName, " (", scaleCfg$res, "m)")
+  for (scaleKey in names(scales)) {
+    scaleCfg <- scales[[scaleKey]]
+    message("\n  Scale: ", scaleKey, " (", scaleCfg$res, "m)")
 
     for (layerName in names(derivatives)) {
-      outFiles[[paste(scaleName, layerName)]] <- aggregateAndSave(
+      outFiles[[paste(scaleKey, layerName)]] <- aggregateAndSave(
         rast30m = derivatives[[layerName]],
-        scaleName = scaleName,
+        scaleName = scaleCfg$scaleName,
         layerName = layerName,
         outputDir = scaleCfg$dir,
         targetResM = scaleCfg$res,
@@ -114,12 +125,12 @@ processDEM <- function(demRawDir, processedDir, habitatOutputDir,
 
   # Step 5: Sanity check summaries
   message("\nStep 5: Output summaries...")
-  for (scaleName in names(scales)) {
-    scaleCfg <- scales[[scaleName]]
-    message("\n  --- ", toupper(scaleName), " scale (", scaleCfg$res, "m) ---")
+  for (scaleKey in names(scales)) {
+    scaleCfg <- scales[[scaleKey]]
+    message("\n  --- ", toupper(scaleKey), " (", scaleCfg$res, "m) ---")
 
     for (layerName in names(derivatives)) {
-      outFile <- file.path(scaleCfg$dir, paste0(layerName, "_", scaleName, "_", basename(scaleCfg$dir), ".tif"))
+      outFile <- file.path(scaleCfg$dir, paste0(layerName, "_", scaleCfg$scaleName, "_", basename(scaleCfg$dir), ".tif"))
       if (file.exists(outFile)) {
         r <- terra::rast(outFile)
         vals <- terra::values(r, na.rm = TRUE)

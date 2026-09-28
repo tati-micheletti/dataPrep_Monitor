@@ -2,49 +2,45 @@
 #'
 #' Downloads the CTM/HCTM crop type maps (Tetteh et al. 2026 HCTM
 #' requires a manual download, see `downloadLanduse()`), then computes
-#' the 14-category proportion layers at habitat and landscape scales for
-#' every year in `landuseYears`.
+#' the 14-category proportion layers for every year in `landuseYears`, at
+#' every distinct habitat/landscape resolution actually needed (see
+#' `computeLanduse()`).
 #'
 #' @param landuseRawDir Character. Directory for downloaded raw maps.
-#' @param habitatOutputDir Character. Directory for habitat-scale outputs.
-#' @param landscapeOutputDir Character. Directory for landscape-scale outputs.
+#' @param processedRoot Character. `predictors/processed` directory
+#'   (without the scale_X leaf).
 #' @param landuseYears Integer vector of years to process.
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
-#' @param habitatResolutionM Numeric. Habitat scale resolution in metres.
-#' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
+#' @param habitatResolutions,landscapeResolutions Numeric vectors. Every
+#'   distinct resolution (m) actually needed at that scale.
 #' @param pythonScriptPath Character. Path to `download_landuse.py`.
 #' @param requirementsPath Character. Path to `requirements.txt`.
 #' @param force Logical. If TRUE, recompute and overwrite every year even if
 #'   a valid cached output already exists (e.g. a bug was found in the raw
 #'   crop type maps).
 #' @return Invisibly, a named list of output file paths per year.
-prepareLanduse <- function(landuseRawDir, habitatOutputDir, landscapeOutputDir,
-                            landuseYears, targetCRS, habitatResolutionM,
-                            landscapeResolutionM, pythonScriptPath,
-                            requirementsPath, force = FALSE) {
+prepareLanduse <- function(landuseRawDir, processedRoot, landuseYears, targetCRS,
+                            habitatResolutions, landscapeResolutions,
+                            pythonScriptPath, requirementsPath, force = FALSE) {
 
   downloadLanduse(landuseRawDir = landuseRawDir,
                    pythonScriptPath = pythonScriptPath,
                    requirementsPath = requirementsPath)
 
-  dir.create(habitatOutputDir, recursive = TRUE, showWarnings = FALSE)
-  dir.create(landscapeOutputDir, recursive = TRUE, showWarnings = FALSE)
-
   message("Processing land use for years: ", paste(landuseYears, collapse = ", "))
   message("Datasets: CTM (Schwieder/Tetteh v302) + HCTM (Tetteh 2026)")
   message("Output categories: 14 (consistent across all years)")
-  message("Output scales: ", habitatResolutionM, "m (habitat), ",
-          landscapeResolutionM, "m (landscape)")
+  message("Output scales: ", paste0(habitatResolutions, "m", collapse = "/"), " (habitat), ",
+          paste0(landscapeResolutions, "m", collapse = "/"), " (landscape)")
 
   outFiles <- lapply(landuseYears, function(yr) {
     message("\nYear: ", yr)
     computeLanduse(year = yr,
                     landuseRawDir = landuseRawDir,
-                    habitatOutputDir = habitatOutputDir,
-                    landscapeOutputDir = landscapeOutputDir,
+                    processedRoot = processedRoot,
+                    habitatResolutions = habitatResolutions,
+                    landscapeResolutions = landscapeResolutions,
                     targetCRS = targetCRS,
-                    habitatResolutionM = habitatResolutionM,
-                    landscapeResolutionM = landscapeResolutionM,
                     force = force)
   })
   names(outFiles) <- landuseYears

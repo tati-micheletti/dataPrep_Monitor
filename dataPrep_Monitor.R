@@ -57,6 +57,26 @@ defineModule(sim, list(
                     "Output resolution (m) for landscape-scale rasters. Also used, via",
                     "scaleLabel(), to name that scale's inputs/outputs subfolders -- must",
                     "match inputs_Monitor's/models_Monitor's copies of this value."),
+    defineParameter("resolutionConfig", "list", NULL, NA, NA,
+                    "NULL (default): every species uses the shared *ResolutionM parameters",
+                    "above. Otherwise a named list, species -> scale -> resolution (m),",
+                    "produced by extractResolutionConfig() (sharedSpeciesConfig.R, repo",
+                    "root) from speciesConfig_general.csv's resolution_m column. Used to",
+                    "look up each species' own resolution when building its occurrence-",
+                    "extraction covariate stack."),
+    defineParameter("distinctClimateResolutions", "numeric", NULL, NA, NA,
+                    "Every distinct climate-scale resolution (m) actually needed across",
+                    "all species (sort(unique(...)) of resolutionConfig's climate values,",
+                    "falling back to climateResolutionM where unset) -- computed once by",
+                    "the orchestrating script (runMe.R) so this scale's rasters are",
+                    "generated exactly once per distinct resolution, not once per",
+                    "species. NULL (default): falls back to climateResolutionM alone."),
+    defineParameter("distinctHabitatResolutions", "numeric", NULL, NA, NA,
+                    "Same as distinctClimateResolutions, for the habitat scale. NULL",
+                    "(default): falls back to habitatResolutionM alone."),
+    defineParameter("distinctLandscapeResolutions", "numeric", NULL, NA, NA,
+                    "Same as distinctClimateResolutions, for the landscape scale. NULL",
+                    "(default): falls back to landscapeResolutionM alone."),
 
     ## Climate --------------------------------------------------------------------
     defineParameter("climateTargetYears", "numeric", 2005:2025, NA, NA,
@@ -245,17 +265,16 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     prepareDEM = {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$demPaths) || P(sim)$rerunDEM) {
+        habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
+        landscapeResolutions <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
         sim$demPaths <- prepareDEM(
           demRawDir = file.path(inputPath(sim), "predictors", "raw", "dem"),
           processedDir = file.path(inputPath(sim), "predictors", "processed", "dem"),
-          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                        scaleLabel(P(sim)$habitatResolutionM)),
-          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                          scaleLabel(P(sim)$landscapeResolutionM)),
+          processedRoot = file.path(inputPath(sim), "predictors", "processed"),
           bboxVec = P(sim)$europeBbox,
           targetCRS = P(sim)$targetCRS,
-          habitatResolutionM = P(sim)$habitatResolutionM,
-          landscapeResolutionM = P(sim)$landscapeResolutionM,
+          habitatResolutions = habitatResolutions,
+          landscapeResolutions = landscapeResolutions,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_dem.py"),
           requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
           force = P(sim)$rerunDEM)
@@ -266,16 +285,15 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     prepareLanduse = {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landusePaths) || P(sim)$rerunLanduse) {
+        habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
+        landscapeResolutions <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
         sim$landusePaths <- prepareLanduse(
           landuseRawDir = file.path(inputPath(sim), "predictors", "raw", "landuse"),
-          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                        scaleLabel(P(sim)$habitatResolutionM)),
-          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                          scaleLabel(P(sim)$landscapeResolutionM)),
+          processedRoot = file.path(inputPath(sim), "predictors", "processed"),
           landuseYears = P(sim)$landuseYears,
           targetCRS = P(sim)$targetCRS,
-          habitatResolutionM = P(sim)$habitatResolutionM,
-          landscapeResolutionM = P(sim)$landscapeResolutionM,
+          habitatResolutions = habitatResolutions,
+          landscapeResolutions = landscapeResolutions,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landuse.py"),
           requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
           force = P(sim)$rerunLanduse)
@@ -286,17 +304,16 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     prepareLandcover = {
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landcoverPaths) || P(sim)$rerunLandcover) {
+        habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
+        landscapeResolutions <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
         sim$landcoverPaths <- prepareLandcover(
           landcoverRawDir = file.path(inputPath(sim), "predictors", "raw", "landcover"),
-          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                        scaleLabel(P(sim)$habitatResolutionM)),
-          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                          scaleLabel(P(sim)$landscapeResolutionM)),
+          processedRoot = file.path(inputPath(sim), "predictors", "processed"),
           bboxVec = P(sim)$europeBbox,
           tokenJSONPath = resolvePath(outputPath(sim), P(sim)$clmsTokenJSONPath),
           targetCRS = P(sim)$targetCRS,
-          habitatResolutionM = P(sim)$habitatResolutionM,
-          landscapeResolutionM = P(sim)$landscapeResolutionM,
+          habitatResolutions = habitatResolutions,
+          landscapeResolutions = landscapeResolutions,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landcover.py"),
           requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
           force = P(sim)$rerunLandcover)
@@ -324,10 +341,10 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           ddaTerritoriesXlsxPath = file.path(inputPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
           ddaVisitsXlsxPath = file.path(inputPath(sim), P(sim)$ddaVisitsXlsxSubpath),
           probeflaechenShpPath = file.path(inputPath(sim), P(sim)$probeflaechenShpSubpath),
-          habitatOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                        scaleLabel(P(sim)$habitatResolutionM)),
-          landscapeOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                          scaleLabel(P(sim)$landscapeResolutionM)),
+          processedRoot = file.path(inputPath(sim), "predictors", "processed"),
+          resolutionConfig = P(sim)$resolutionConfig,
+          sharedHabitatResolutionM = P(sim)$habitatResolutionM,
+          sharedLandscapeResolutionM = P(sim)$landscapeResolutionM,
           occurrenceOutputDir = file.path(inputPath(sim), "response", "processed"),
           species = P(sim)$species,
           habitatYears = P(sim)$habitatYears,

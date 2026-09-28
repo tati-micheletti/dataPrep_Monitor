@@ -1,24 +1,38 @@
 #' Prepare German point count data for the habitat SDM (200m scale)
 #'
 #' Filters raw MhB point count observations to the breeding season and
-#' focal species/years, overlays them on the 200m reference grid, builds
-#' presences/absences per route x year x species, spatially thins at
-#' 400m, extracts habitat covariates, and saves one RDS per species/year.
+#' focal species/years, overlays them on the habitat reference grid,
+#' builds presences/absences per route x year x species, spatially thins,
+#' extracts habitat covariates, and saves one RDS per species/year.
+#'
+#' Species are grouped by their resolved habitat resolution
+#' (`resolutionConfig`, falling back to `sharedResolutionM` -- see
+#' DECISIONS.md's 2026-09-28 entry); the reference-grid/cell-extraction
+#' pass (which genuinely depends on the grid's resolution) runs once per
+#' distinct resolution group, not once globally. With no species
+#' overridden (today's default), there is exactly one group and behavior
+#' is identical to the single-shared-grid version this replaced.
 #'
 #' NOTE: expects `landcover_<corineYear>_habitat_<scaleLabel>.tif` to
-#' already exist in `habitatOutputDir` -- CORINE land cover processing is
-#' out of scope for this module and must be supplied separately.
+#' already exist in each resolution group's own processed folder --
+#' CORINE land cover processing is out of scope for this module and must
+#' be supplied separately.
 #'
 #' Follows Wiedenroth et al. 03a_occurrence-prep_200m.R with adaptations
 #' for multi-year data.
 #'
 #' @param mhbObsPath Character. Path to the raw MhB point count CSV.
 #' @param probeflaechenShpPath Character. Path to the Probeflaechen shapefile.
-#' @param habitatOutputDir Character. Directory with habitat-scale covariate
-#'   rasters (landuse/landcover/DEM derivatives, and where outputs are read).
+#' @param processedRoot Character. `predictors/processed` directory
+#'   (without the scale_X leaf -- each resolution group's own leaf, via
+#'   `scaleLabel()`, is appended internally).
 #' @param outputDir Character. Directory to save per-species-year RDS files in.
 #' @param species Character vector of Latin species names to process.
 #' @param habitatYears Integer vector of years to process.
+#' @param resolutionConfig Named list, species -> scale -> resolution (m), or
+#'   NULL (default). See `dataPrep_Monitor`'s parameter of the same name.
+#' @param sharedResolutionM Numeric. Shared default habitat resolution (m),
+#'   used for any species absent from `resolutionConfig`.
 #' @param localeCtype Character. Locale for German special characters.
 #' @param thinDist Numeric. Default spatial thinning distance in metres, used
 #'   for any species without its own entry in `perSpeciesThinDist`.
@@ -45,8 +59,9 @@
 #'   back to a temp directory, for standalone/test calls.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
-                                      habitatOutputDir, outputDir, species,
-                                      habitatYears, localeCtype = "de_DE.UTF-8",
+                                      processedRoot, outputDir, species,
+                                      habitatYears, resolutionConfig = NULL,
+                                      sharedResolutionM, localeCtype = "de_DE.UTF-8",
                                       thinDist = 400, perSpeciesThinDist = NULL,
                                       useThinning = TRUE, brutzeitcodeFilter = NULL,
                                       cachePath = NULL) {
@@ -55,18 +70,6 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
 
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
-
-  # Reference raster: solar radiation at 200m -- has the most NAs at
-  # borders, giving a conservative exclusion of edge cells with
-  # incomplete covariate data. Following Wiedenroth et al.
-  # Resolution appended to the filename (second safety layer beyond the
-  # containing scaleLabel()-named folder, habitatOutputDir itself).
-  refRaster <- terra::rast(file.path(habitatOutputDir,
-                                      paste0("solar_radiation_habitat_", basename(habitatOutputDir), ".tif")))
-  message("Reference raster (200m solar radiation):")
-  message("CRS: ", terra::crs(refRaster, describe = TRUE)$code)
-  message("Resolution: ", paste(terra::res(refRaster), collapse = " x "), "m")
-  message("Extent: ", paste(as.vector(terra::ext(refRaster)), collapse = " "))
 
   message("Loading raw point count data...")
   mhbRaw <- read.csv(mhbObsPath, header = TRUE)
@@ -122,70 +125,108 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   df$x <- coords3035[, 1]
   df$y <- coords3035[, 2]
 
-  message("Extracting 200m grid cell references...")
-  cellRefs <- terra::extract(refRaster, df[, c("x", "y")], cells = TRUE)
-  df$cell <- cellRefs$cell
-  df$ref_val <- cellRefs[, 2]
+  # Species-independent: any species' qualifying detection at a route/year
+  # counts as "surveyed" -- computed once from the FULL (all-species) table
+  # so a resolution group never sees a route as "unsurveyed" just because
+  # the detection that actually surveyed it belongs to a species in a
+  # DIFFERENT resolution group.
+  surveyedByYear <- stats::setNames(
+    lapply(habitatYears, function(yr) unique(df$AREA_NATIONAL_CODE[df$year == yr])),
+    as.character(habitatYears))
 
-  nBefore <- nrow(df)
-  df <- df[!is.na(df$ref_val), ]
-  message("Removed ", nBefore - nrow(df), " observations outside study area")
+  # Group species by resolved habitat resolution (usually just one group,
+  # the shared default -- more than one only when a species has its own
+  # resolution_m override; see DECISIONS.md's 2026-09-28 entry).
+  resolvedRes <- vapply(species, function(sp) {
+    v <- if (!is.null(resolutionConfig)) resolutionConfig[[sp]]$habitat else NULL
+    if (is.null(v) || is.na(v)) sharedResolutionM else v
+  }, numeric(1))
+  resGroups <- split(species, resolvedRes)
 
-  message("\nBuilding full PA matrix...")
-  surveyedRoutes <- df |> dplyr::distinct(AREA_NATIONAL_CODE, year)
-  message("Surveyed route x year combinations: ", nrow(surveyedRoutes))
-
-  message("\nProcessing ", length(species), " species x ", length(habitatYears), " years...")
+  message("\nProcessing ", length(species), " species x ", length(habitatYears),
+          " years, in ", length(resGroups), " resolution group(s)...")
 
   outFiles <- list()
 
-  for (yr in habitatYears) {
+  for (resKey in names(resGroups)) {
+    resM <- as.numeric(resKey)
+    groupSpecies <- resGroups[[resKey]]
+    habitatOutputDir <- file.path(processedRoot, scaleLabel(resM))
 
-    # Hoisted per-year (not per-species-year, as before): neither the
-    # covariate stack nor "which routes were surveyed this year" (any
-    # species' detection counts) depends on the focal species, so both
-    # are computed once and shared across species. surveyedThisYr in
-    # particular MUST be computed here rather than passed as the whole
-    # `df` into the cached helper below -- `df` holds every species, and
-    # digesting it whole would invalidate every species whenever ANY
-    # other species' data changed, defeating per-species selectivity.
-    surveyedThisYr <- unique(df$AREA_NATIONAL_CODE[df$year == yr])
+    message("\n=== Resolution group ", scaleLabel(resM), " (", resM, "m): ",
+            paste(groupSpecies, collapse = ", "), " ===")
 
-    covStack <- buildHabitatCovStackOneYear(yr, habitatOutputDir)
-    if (is.null(covStack)) next
+    # Reference raster: solar radiation at this group's own resolution --
+    # has the most NAs at borders, giving a conservative exclusion of edge
+    # cells with incomplete covariate data. Following Wiedenroth et al.
+    # Resolution appended to the filename (second safety layer beyond the
+    # containing scaleLabel()-named folder, habitatOutputDir itself).
+    refRaster <- terra::rast(file.path(habitatOutputDir,
+                                        paste0("solar_radiation_habitat_", basename(habitatOutputDir), ".tif")))
+    message("Reference raster (", resM, "m solar radiation):")
+    message("CRS: ", terra::crs(refRaster, describe = TRUE)$code)
+    message("Resolution: ", paste(terra::res(refRaster), collapse = " x "), "m")
+    message("Extent: ", paste(as.vector(terra::ext(refRaster)), collapse = " "))
 
-    for (sp in species) {
-      spClean <- gsub(" ", "_", sp)
-      outFile <- file.path(outputDir, paste0(spClean, "_habitat_", yr, ".rds"))
+    # Cell references depend on this group's own grid -- scoped to just
+    # this group's species rows (a species in another group is skipped,
+    # not extracted against the wrong grid).
+    dfGroup <- df[df$latin_name %in% groupSpecies, ]
+    cellRefs <- terra::extract(refRaster, dfGroup[, c("x", "y")], cells = TRUE)
+    dfGroup$cell <- cellRefs$cell
+    dfGroup$ref_val <- cellRefs[, 2]
 
-      spPres <- df |> dplyr::filter(latin_name == sp, year == yr)
+    nBefore <- nrow(dfGroup)
+    dfGroup <- dfGroup[!is.na(dfGroup$ref_val), ]
+    message("Removed ", nBefore - nrow(dfGroup), " observations outside study area (this group)")
 
-      if (!is.null(brutzeitcodeFilter) && sp %in% names(brutzeitcodeFilter)) {
-        prefix <- brutzeitcodeFilter[[sp]]
-        nBeforeCode <- nrow(spPres)
-        spPres <- spPres[startsWith(spPres$ATLAS_CODE, prefix), ]
-        message("  ATLAS_CODE filter '", prefix, "*' for ", sp, ": ",
-                nBeforeCode, " -> ", nrow(spPres), " records")
+    message("\nBuilding full PA matrix...")
+    surveyedRoutes <- dfGroup |> dplyr::distinct(AREA_NATIONAL_CODE, year)
+    message("Surveyed route x year combinations: ", nrow(surveyedRoutes))
+
+    for (yr in habitatYears) {
+
+      # Hoisted per-year (not per-species-year, as before): the covariate
+      # stack doesn't depend on the focal species, so it's computed once
+      # and shared across this group's species.
+      surveyedThisYr <- surveyedByYear[[as.character(yr)]]
+
+      covStack <- buildHabitatCovStackOneYear(yr, habitatOutputDir)
+      if (is.null(covStack)) next
+
+      for (sp in groupSpecies) {
+        spClean <- gsub(" ", "_", sp)
+        outFile <- file.path(outputDir, paste0(spClean, "_habitat_", yr, ".rds"))
+
+        spPres <- dfGroup |> dplyr::filter(latin_name == sp, year == yr)
+
+        if (!is.null(brutzeitcodeFilter) && sp %in% names(brutzeitcodeFilter)) {
+          prefix <- brutzeitcodeFilter[[sp]]
+          nBeforeCode <- nrow(spPres)
+          spPres <- spPres[startsWith(spPres$ATLAS_CODE, prefix), ]
+          message("  ATLAS_CODE filter '", prefix, "*' for ", sp, ": ",
+                  nBeforeCode, " -> ", nrow(spPres), " records")
+        }
+
+        spThinDist <- if (!is.null(perSpeciesThinDist) && sp %in% names(perSpeciesThinDist)) {
+          perSpeciesThinDist[[sp]]
+        } else {
+          thinDist
+        }
+
+        result <- reproducible::Cache(
+          buildHabitatSpeciesYear, sp = sp, yr = yr, spPres = spPres,
+          surveyedThisYr = surveyedThisYr, pf = pf, refRaster = refRaster,
+          covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
+          cachePath = cachePath,
+          userTags = c("occurrencePrepGerHabitat", spClean, as.character(yr)))
+
+        if (is.null(result)) next
+
+        saveRDS(result, outFile)
+        message("Saved -> ", outFile)
+        outFiles[[paste(sp, yr)]] <- outFile
       }
-
-      spThinDist <- if (!is.null(perSpeciesThinDist) && sp %in% names(perSpeciesThinDist)) {
-        perSpeciesThinDist[[sp]]
-      } else {
-        thinDist
-      }
-
-      result <- reproducible::Cache(
-        buildHabitatSpeciesYear, sp = sp, yr = yr, spPres = spPres,
-        surveyedThisYr = surveyedThisYr, pf = pf, refRaster = refRaster,
-        covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
-        cachePath = cachePath,
-        userTags = c("occurrencePrepGerHabitat", spClean, as.character(yr)))
-
-      if (is.null(result)) next
-
-      saveRDS(result, outFile)
-      message("Saved -> ", outFile)
-      outFiles[[paste(sp, yr)]] <- outFile
     }
   }
 

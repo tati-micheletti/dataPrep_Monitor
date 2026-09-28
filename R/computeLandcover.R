@@ -2,47 +2,65 @@
 #'
 #' Input CORINE rasters are already EPSG:3035 at 100m; this reprojects
 #' only if needed and computes built_up/trees/water proportion layers at
-#' both habitat and landscape scales.
+#' every distinct habitat/landscape resolution actually needed (usually
+#' just one of each -- the shared default -- but more than one when a
+#' species has its own `resolution_m` override; see DECISIONS.md's
+#' 2026-09-28 entry).
 #'
 #' @param corineYear Integer. One of 2006, 2012, 2018.
 #' @param landcoverRawDir Character. Directory containing raw CORINE rasters.
-#' @param habitatOutputDir Character. Directory for habitat-scale outputs.
-#' @param landscapeOutputDir Character. Directory for landscape-scale outputs.
+#' @param processedRoot Character. `predictors/processed` directory
+#'   (without the scale_X leaf -- each resolution's own leaf, via
+#'   `scaleLabel()`, is appended internally).
+#' @param habitatResolutions,landscapeResolutions Numeric vectors. Every
+#'   distinct resolution (m) actually needed at that scale, across all
+#'   species (usually a length-1 vector, the shared default).
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
-#' @param habitatResolutionM Numeric. Habitat scale resolution in metres.
-#' @param landscapeResolutionM Numeric. Landscape scale resolution in metres.
 #' @param force Logical. If TRUE, recompute and overwrite even if a valid
 #'   cached output already exists (e.g. a bug was found in the raw data).
-#' @return Invisibly, a list with `habitat` and `landscape` output paths.
-computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
-                              landscapeOutputDir, targetCRS,
-                              habitatResolutionM, landscapeResolutionM,
-                              force = FALSE) {
+#' @return Invisibly, a named list of output file paths, keyed
+#'   `"habitat_<resM>"`/`"landscape_<resM>"`.
+computeLandcover <- function(corineYear, landcoverRawDir, processedRoot,
+                              habitatResolutions, landscapeResolutions,
+                              targetCRS, force = FALSE) {
 
   rawFile <- file.path(landcoverRawDir, corineRawFilename(corineYear))
   if (!file.exists(rawFile)) {
     stop("CORINE file not found: ", rawFile)
   }
 
+  # One entry per distinct resolution actually needed, at each scale --
+  # usually 2 total (one habitat, one landscape default), more when a
+  # species has its own resolution_m override.
+  scales <- c(
+    lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
+    lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r))
+  )
+  scales <- lapply(scales, function(s) {
+    s$dir <- file.path(processedRoot, scaleLabel(s$res))
+    s
+  })
+  names(scales) <- vapply(scales, function(s) paste0(s$scaleName, "_", s$res), character(1))
+
+  for (s in scales) dir.create(s$dir, recursive = TRUE, showWarnings = FALSE)
+
   # Resolution appended to the filename itself (second safety layer beyond
   # the containing scaleLabel()-named folder) -- see aggregateAndSave.R.
-  outHabitat <- file.path(habitatOutputDir,
-                           paste0("landcover_", corineYear, "_habitat_", basename(habitatOutputDir), ".tif"))
-  outLandscape <- file.path(landscapeOutputDir,
-                             paste0("landcover_", corineYear, "_landscape_", basename(landscapeOutputDir), ".tif"))
+  outFiles <- lapply(scales, function(s) {
+    file.path(s$dir, paste0("landcover_", corineYear, "_", s$scaleName, "_", basename(s$dir), ".tif"))
+  })
 
-  # Independent per-scale cache check (Lisa Hildebrand's v2 pattern) -- a
-  # scale whose cached output is already valid is skipped even when the
-  # OTHER scale needs recomputing, instead of redoing both from scratch.
-  needHabitat <- force || !isValidRasterFile(outHabitat)
-  needLandscape <- force || !isValidRasterFile(outLandscape)
+  # Independent per-scale-entry cache check (Lisa Hildebrand's v2 pattern,
+  # generalized beyond exactly 2 scales) -- an entry whose cached output is
+  # already valid is skipped even when another entry needs recomputing.
+  need <- vapply(outFiles, function(f) force || !isValidRasterFile(f), logical(1))
 
-  if (!needHabitat && !needLandscape) {
+  if (!any(need)) {
     message("Cache hit -- skipping CORINE ", corineYear)
-    return(invisible(list(habitat = outHabitat, landscape = outLandscape)))
+    return(invisible(outFiles))
   }
-  if (!needHabitat) message("Habitat-scale cache hit -- computing landscape scale only")
-  if (!needLandscape) message("Landscape-scale cache hit -- computing habitat scale only")
+  for (nm in names(scales)[!need]) message(nm, " cache hit -- skipping")
+  for (nm in names(scales)[need]) message(nm, " needs (re)computation")
 
   message("Loading CORINE ", corineYear, ": ", basename(rawFile))
   lc <- terra::setMinMax(terra::rast(rawFile))
@@ -57,28 +75,22 @@ computeLandcover <- function(corineYear, landcoverRawDir, habitatOutputDir,
   categories <- landcoverCategoriesCorine()
   message("Computing ", length(categories), " category proportions...")
 
-  habitatLayers <- list()
-  landscapeLayers <- list()
+  layersByScale <- stats::setNames(vector("list", length(scales)), names(scales))
+  neededNames <- names(scales)[need]
 
   for (catName in names(categories)) {
     codes <- categories[[catName]]
     message("    ", catName, " (codes: ", paste(codes, collapse = ", "), ")")
-    if (needHabitat) {
-      habitatLayers[[catName]] <- makeCategoryProportionLayer(lc, codes, habitatResolutionM, catName, targetCRS)
-    }
-    if (needLandscape) {
-      landscapeLayers[[catName]] <- makeCategoryProportionLayer(lc, codes, landscapeResolutionM, catName, targetCRS)
+    for (nm in neededNames) {
+      s <- scales[[nm]]
+      layersByScale[[nm]][[catName]] <- makeCategoryProportionLayer(lc, codes, s$res, catName, targetCRS)
     }
   }
 
-  if (needHabitat) {
-    terra::writeRaster(terra::rast(habitatLayers), outHabitat, overwrite = TRUE)
-    message("  Saved habitat:   ", outHabitat)
-  }
-  if (needLandscape) {
-    terra::writeRaster(terra::rast(landscapeLayers), outLandscape, overwrite = TRUE)
-    message("  Saved landscape: ", outLandscape)
+  for (nm in neededNames) {
+    terra::writeRaster(terra::rast(layersByScale[[nm]]), outFiles[[nm]], overwrite = TRUE)
+    message("  Saved ", nm, ": ", outFiles[[nm]])
   }
 
-  invisible(list(habitat = outHabitat, landscape = outLandscape))
+  invisible(outFiles)
 }

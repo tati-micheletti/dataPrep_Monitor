@@ -16,23 +16,35 @@
 #' per year via `loadCovariates()`, spatially thin, and save one RDS per
 #' species/year -- identical downstream handling regardless of data source.
 #'
-#' NOTE: expects `landcover_<corineYear>_landscape.tif` to already exist
-#' in `landscapeOutputDir` (via `loadCovariates()`) -- CORINE land cover
-#' processing is out of scope for this module and must be supplied
-#' separately.
+#' NOTE: expects `landcover_<corineYear>_landscape_<scaleLabel>.tif` to
+#' already exist in each species' own resolved processed folder (via
+#' `loadCovariates()`) -- CORINE land cover processing is out of scope for
+#' this module and must be supplied separately.
+#'
+#' Each species' own landscape covariate stack is read from its own
+#' resolved resolution's folder (`resolutionConfig`, falling back to
+#' `sharedResolutionM` -- see DECISIONS.md's 2026-09-28 entry); species
+#' sharing a resolution also share one cached covariate stack per year.
+#' Unlike habitat scale, the presence/absence CONSTRUCTION here never
+#' touches a resolution-specific grid (coordinates come straight from the
+#' Probeflaechen shapefile's route centroids), so only the covariate-stack
+#' lookup needs to vary per species -- no reference-grid regrouping needed.
 #'
 #' @param ddaTerritoriesXlsxPath Character. Path to the DDA territories xlsx.
 #'   Only read if at least one species uses the default DDA data source.
 #' @param ddaVisitsXlsxPath Character. Path to the DDA visited-routes xlsx.
 #'   Only read if at least one species uses the default DDA data source.
 #' @param probeflaechenShpPath Character. Path to the Probeflaechen shapefile.
-#' @param landscapeOutputDir Character. Directory with landscape-scale
-#'   covariate rasters, and where outputs are read.
-#' @param habitatOutputDir Character. Directory with habitat-scale rasters
-#'   (passed through to `loadCovariates()`; currently unused there).
+#' @param processedRoot Character. `predictors/processed` directory
+#'   (without the scale_X leaf -- each species' own leaf, via
+#'   `scaleLabel()`, is appended internally).
 #' @param outputDir Character. Directory to save per-species-year RDS files in.
 #' @param species Character vector of Latin species names to process.
 #' @param landscapeYears Integer vector of years to process.
+#' @param resolutionConfig Named list, species -> scale -> resolution (m), or
+#'   NULL (default). See `dataPrep_Monitor`'s parameter of the same name.
+#' @param sharedResolutionM Numeric. Shared default landscape resolution (m),
+#'   used for any species absent from `resolutionConfig`.
 #' @param localeCtype Character. Locale for German special characters.
 #' @param thinDist Numeric. Default spatial thinning distance in metres, used
 #'   for any species without its own entry in `perSpeciesThinDist`.
@@ -78,9 +90,10 @@
 #'   sessions doesn't matter.
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath,
-                                        probeflaechenShpPath, landscapeOutputDir,
-                                        habitatOutputDir, outputDir, species,
-                                        landscapeYears, localeCtype = "de_DE.UTF-8",
+                                        probeflaechenShpPath, processedRoot,
+                                        outputDir, species, landscapeYears,
+                                        resolutionConfig = NULL, sharedResolutionM,
+                                        localeCtype = "de_DE.UTF-8",
                                         thinDist = 2000, perSpeciesThinDist = NULL,
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
@@ -251,13 +264,12 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
   message("\nProcessing ", length(species), " species x ", length(landscapeYears), " years...")
 
-  # Loaded once per year (not once per species-year, as before) -- also
-  # lets its content flow into Cache()'s digest below via `covStack`,
+  # Keyed by resolved resolution (m), then year -- species sharing a
+  # resolution share one cached covariate stack per year. Also lets each
+  # stack's content flow into Cache()'s digest below via `covStack`,
   # instead of only a directory path (which wouldn't change if the raster
   # CONTENT changes but the path doesn't).
-  covStacksByYear <- stats::setNames(
-    lapply(landscapeYears, function(yr) loadCovariates(yr, landscapeOutputDir, habitatOutputDir)),
-    as.character(landscapeYears))
+  covStacksByResolution <- list()
 
   outFiles <- list()
 
@@ -265,6 +277,22 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     spClean <- gsub(" ", "_", spLatin)
 
     message("\n  -- ", spLatin, " --------------------")
+
+    resM <- if (!is.null(resolutionConfig) && !is.null(resolutionConfig[[spLatin]]$landscape) &&
+                !is.na(resolutionConfig[[spLatin]]$landscape)) {
+      resolutionConfig[[spLatin]]$landscape
+    } else {
+      sharedResolutionM
+    }
+    landscapeOutputDir <- file.path(processedRoot, scaleLabel(resM))
+
+    resKey <- as.character(resM)
+    if (is.null(covStacksByResolution[[resKey]])) {
+      covStacksByResolution[[resKey]] <- stats::setNames(
+        lapply(landscapeYears, function(yr) loadCovariates(yr, landscapeOutputDir, NULL)),
+        as.character(landscapeYears))
+    }
+    covStacksByYear <- covStacksByResolution[[resKey]]
 
     spThinDist <- if (!is.null(perSpeciesThinDist) && spLatin %in% names(perSpeciesThinDist)) {
       perSpeciesThinDist[[spLatin]]
