@@ -16,6 +16,7 @@ defineModule(sim, list(
   citation = list("citation.bib"),
   documentation = list("NEWS.md", "README.md", "dataPrep_Monitor.Rmd"),
   reqdPkgs = list("PredictiveEcology/SpaDES.core@development (>= 3.2.0)",
+                   "PredictiveEcology/reproducible@development",
                    "terra", "dismo", "raster", "spatialEco",
                    "sf", "dplyr", "tidyr", "purrr", "readxl", "reticulate"),
   parameters = bindrows(
@@ -333,7 +334,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           perSpeciesThinDist = P(sim)$perSpeciesThinDist,
           brutzeitcodeFilter = P(sim)$brutzeitcodeFilter,
           perSpeciesDataSource = P(sim)$perSpeciesDataSource,
-          germanNames = P(sim)$germanNames)
+          germanNames = P(sim)$germanNames,
+          cachePath = cachePath(sim))
       }
       # ! ----- STOP EDITING ----- ! #
     },

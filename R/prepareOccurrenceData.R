@@ -54,6 +54,10 @@
 #'   `speciesCanonical.csv` via `canonicalGermanNames()` in
 #'   `sharedSpeciesCanonical.R` -- see `occurrencePrepGerLandscape()`'s
 #'   docstring for the full rationale.
+#' @param cachePath Character, or NULL (default). Directory for
+#'   `reproducible::Cache()`'s per-species(-year) cache in each of the 3
+#'   occurrence-prep functions -- e.g. `cachePath(sim)`, a stable location
+#'   shared across runs (NOT the per-run timestamped output folder).
 #' @return Invisibly, a list with `europe`, `gerHabitat`, and
 #'   `gerLandscape` output file path vectors.
 prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
@@ -65,7 +69,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    useThinning = TRUE, thinDistEuropeM = 100000,
                                    thinDistHabitatM = 400, thinDistLandscapeM = 2000,
                                    perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL,
-                                   perSpeciesDataSource = NULL, germanNames) {
+                                   perSpeciesDataSource = NULL, germanNames,
+                                   cachePath = NULL) {
 
   extractScale <- function(nested, scale) {
     if (is.null(nested)) return(NULL)
@@ -81,7 +86,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     species = species,
     useThinning = useThinning,
     thinDist = thinDistEuropeM,
-    perSpeciesThinDist = extractScale(perSpeciesThinDist, "climate"))
+    perSpeciesThinDist = extractScale(perSpeciesThinDist, "climate"),
+    cachePath = cachePath)
 
   gerHabitatFiles <- occurrencePrepGerHabitat(
     mhbObsPath = mhbObsPath,
@@ -94,7 +100,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     useThinning = useThinning,
     thinDist = thinDistHabitatM,
     perSpeciesThinDist = extractScale(perSpeciesThinDist, "habitat"),
-    brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "habitat"))
+    brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "habitat"),
+    cachePath = cachePath)
 
   gerLandscapeFiles <- occurrencePrepGerLandscape(
     ddaTerritoriesXlsxPath = ddaTerritoriesXlsxPath,
@@ -112,7 +119,8 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     mhbObsPath = mhbObsPath,
     perSpeciesDataSource = perSpeciesDataSource,
     germanNames = germanNames,
-    brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "landscape"))
+    brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "landscape"),
+    cachePath = cachePath)
 
   invisible(list(europe = europeFiles,
                   gerHabitat = gerHabitatFiles,
