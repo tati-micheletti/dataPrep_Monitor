@@ -77,12 +77,11 @@ defineModule(sim, list(
                     "Years to prepare German landscape-scale (1km) occurrence data for."),
 
     ## Species / locale -------------------------------------------------------------
-    defineParameter("species", "character",
-                    c("Vanellus vanellus", "Milvus milvus", "Lanius collurio",
-                      "Lullula arborea", "Alauda arvensis", "Saxicola rubetra",
-                      "Emberiza calandra", "Emberiza citrinella", "Buteo buteo",
-                      "Sturnus vulgaris", "Perdix perdix"), NA, NA,
-                    "Latin names of focal species to prepare occurrence data for."),
+    defineParameter("species", "character", NA_character_, NA, NA,
+                    "Latin names of focal species to prepare occurrence data for -- no",
+                    "default (errors if unset); supply sharedSpecies from sharedConfig.R",
+                    "(repo root) so this and inputs_Monitor's roster can never silently",
+                    "drift apart."),
     defineParameter("localeCtype", "character", "de_DE.UTF-8", NA, NA,
                     "Locale used for correct handling of German special characters."),
 
@@ -216,6 +215,10 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
   switch(
     eventType,
     init = {
+      if (identical(P(sim)$species, NA_character_)) {
+        stop("dataPrep_Monitor's species parameter must be supplied explicitly ",
+             "(e.g. sharedSpecies from sharedConfig.R) -- no default roster.")
+      }
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareClimateData")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDEM")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLanduse")
