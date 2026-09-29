@@ -149,6 +149,9 @@ defineModule(sim, list(
                     "Should prepareLanduse be re-run even if sim$landusePaths exists?"),
     defineParameter("rerunLandcover", "logical", FALSE, NA, NA,
                     "Should prepareLandcover be re-run even if sim$landcoverPaths exists?"),
+    defineParameter("rerunDerivedCovariates", "logical", FALSE, NA, NA,
+                    "Should prepareDerivedCovariates (dist_to_woodland, landscape_",
+                    "heterogeneity) be re-run even if sim$derivedCovariatePaths exists?"),
     defineParameter("rerunOccurrenceData", "logical", FALSE, NA, NA,
                     "Should prepareOccurrenceData be re-run even if sim$occurrenceData exists?"),
     defineParameter("useSpatialThinning", "logical", TRUE, NA, NA,
@@ -217,6 +220,11 @@ defineModule(sim, list(
     createsOutput("landcoverPaths", "list",
                   "Named list of land cover raster paths (habitat/landscape) per CORINE",
                   "snapshot year (2006/2012/2018)."),
+    createsOutput("derivedCovariatePaths", "list",
+                  "Named list of dist_to_woodland (per CORINE snapshot year) and",
+                  "landscape_heterogeneity (per land use year) raster paths, keyed",
+                  "\"<year>_<scaleName>_<resM>\" -- computed from landcoverPaths/",
+                  "landusePaths' own outputs, so always scheduled after both."),
     createsOutput("occurrenceData", "list",
                   "List with europe/gerHabitat/gerLandscape vectors of per-species(-year)",
                   "occurrence RDS paths.")
@@ -243,6 +251,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDEM")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLanduse")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLandcover")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDerivedCovariates")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
     },
 
@@ -317,6 +326,34 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landcover.py"),
           requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
           force = P(sim)$rerunLandcover)
+      }
+      # ! ----- STOP EDITING ----- ! #
+    },
+
+    prepareDerivedCovariates = {
+      # ! ----- EDIT BELOW ----- ! #
+      if (is.null(sim$derivedCovariatePaths) || P(sim)$rerunDerivedCovariates) {
+        habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
+        landscapeResolutions <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
+        processedRoot <- file.path(inputPath(sim), "predictors", "processed")
+
+        distPaths <- prepareDistToWoodland(
+          landcoverRawDir = file.path(inputPath(sim), "predictors", "raw", "landcover"),
+          processedRoot = processedRoot,
+          targetCRS = P(sim)$targetCRS,
+          habitatResolutions = habitatResolutions,
+          landscapeResolutions = landscapeResolutions,
+          force = P(sim)$rerunDerivedCovariates)
+
+        heterogeneityPaths <- prepareHeterogeneityIndex(
+          processedRoot = processedRoot,
+          landuseYears = P(sim)$landuseYears,
+          habitatResolutions = habitatResolutions,
+          landscapeResolutions = landscapeResolutions,
+          force = P(sim)$rerunDerivedCovariates)
+
+        sim$derivedCovariatePaths <- list(distToWoodland = distPaths,
+                                           landscapeHeterogeneity = heterogeneityPaths)
       }
       # ! ----- STOP EDITING ----- ! #
     },
