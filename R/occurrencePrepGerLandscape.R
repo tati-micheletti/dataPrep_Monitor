@@ -194,7 +194,13 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
   if (length(mhbRoutedSpecies) > 0) {
     message("Loading raw MhB point count data for landscape-scale routing (",
             paste(mhbRoutedSpecies, collapse = ", "), ")...")
-    mhbRaw <- read.csv(mhbObsPath, header = TRUE)
+    # fileEncoding is explicit (not left to the process's ambient locale) --
+    # see loadSpeciesCanonical() in sharedSpeciesCanonical.R for why: this is
+    # the exact read whose SPECIES_NAME_GERMAN column gets joined against
+    # german_name from speciesCanonical.csv (a DIFFERENT encoding, Latin-1),
+    # and a locale-dependent mismatch here is what silently zeroed out every
+    # Buteo buteo presence at landscape scale.
+    mhbRaw <- read.csv(mhbObsPath, header = TRUE, fileEncoding = "UTF-8")
     mhbRaw <- mhbRaw |>
       dplyr::mutate(date = as.Date(DATE_TIME, "%Y-%m-%d"),
                      year = as.integer(format(date, "%Y")),

@@ -72,7 +72,10 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   Sys.setlocale("LC_CTYPE", localeCtype)
 
   message("Loading raw point count data...")
-  mhbRaw <- read.csv(mhbObsPath, header = TRUE)
+  # fileEncoding is explicit (not left to the process's ambient locale) because
+  # this file is UTF-8 -- see the matching note in sharedSpeciesCanonical.R's
+  # loadSpeciesCanonical() for why leaving this to locale guessing is unsafe.
+  mhbRaw <- read.csv(mhbObsPath, header = TRUE, fileEncoding = "UTF-8")
 
   mhbRaw <- mhbRaw |>
     dplyr::mutate(date = as.Date(DATE_TIME, "%Y-%m-%d"),
