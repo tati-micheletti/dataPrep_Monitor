@@ -269,7 +269,35 @@ buildHabitatCovStackOneYear <- function(yr, habitatOutputDir) {
   slope <- terra::resample(slope, luRef, method = "bilinear")
   solar <- terra::resample(solar, luRef, method = "bilinear")
 
-  covStack <- c(lu, lc, elev, slope, solar)
+  # dist_to_woodland/landscape_heterogeneity (2026-09-29, hedges-backfill
+  # alternatives) -- optional, same convention as loadHabitatCovariates()/
+  # loadCovariates() (models_Monitor): a missing file just means that
+  # candidate predictor isn't offered this run. This function is a
+  # SEPARATE, parallel covariate-stack builder from those two (used here
+  # for occurrence-prep training-point extraction, not prediction-raster
+  # generation) -- confirmed 2026-09-30 it was missed when those two were
+  # updated, causing a real "[PREDICTOR ERROR] ... NOT found in occurrence
+  # data" failure for any species requesting either predictor at habitat
+  # scale.
+  extraLayers <- list()
+  distFile <- file.path(habitatOutputDir, paste0("dist_to_woodland_", corineYr, "_habitat_", resSuffix, ".tif"))
+  if (file.exists(distFile)) {
+    dist <- terra::resample(terra::rast(distFile), luRef, method = "bilinear")
+    terra::values(dist) <- terra::values(dist)
+    extraLayers$dist_to_woodland <- dist
+  }
+  heteroFile <- file.path(habitatOutputDir, paste0("landscape_heterogeneity_", yr, "_habitat_", resSuffix, ".tif"))
+  if (file.exists(heteroFile)) {
+    extraLayers$landscape_heterogeneity <- terra::rast(heteroFile)
+  }
+
+  # combineLayersSafely() rather than a bare c() -- lc/elev/slope/solar/
+  # dist are all resampled (derived, not read-straight-from-disk) rasters,
+  # which can silently corrupt when c()-combined in some terra versions/
+  # session states (see combineLayersSafely.R's docstring / DECISIONS.md
+  # 2026-09-28) -- the same latent bug already fixed in loadCovariates()/
+  # loadHabitatCovariates(), never previously applied here.
+  covStack <- combineLayersSafely(c(as.list(lu), as.list(lc), list(elev, slope, solar), extraLayers))
   names(covStack) <- gsub("_\\d{4}$", "", names(covStack))
 
   hedgeCol <- names(covStack)[grepl("^hedges", names(covStack))]
