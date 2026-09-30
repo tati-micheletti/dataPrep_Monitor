@@ -409,5 +409,21 @@ buildLandscapeSpeciesYear <- function(spLatin, yr, spYr, covStack, useThinning, 
     spThinnedDf <- spYrEnv
   }
 
+  # Confirmed 2026-09-30: unlike buildHabitatSpeciesYear() (where thinning
+  # happens BEFORE covariate extraction, so its own <10 NA-removal check
+  # already covers post-thinning counts too), thinning here is the LAST
+  # step, with nothing checking its own effect. A thinning distance
+  # aggressive enough to remove most presences would otherwise silently
+  # return a technically-valid data.frame with too little real signal --
+  # no warning, no skip -- and only surface later as a much harder-to-
+  # diagnose failure downstream (a degenerate spatial-CV fold, an unstable
+  # BRT fit). Same 10-presence floor as the two earlier checks in this
+  # function, for consistency.
+  if (sum(spThinnedDf$occurrence == 1) < 10) {
+    warning("  Too few presences after thinning (", sum(spThinnedDf$occurrence == 1),
+            ") for ", spLatin, " ", yr, " -- skipping")
+    return(NULL)
+  }
+
   spThinnedDf
 }
