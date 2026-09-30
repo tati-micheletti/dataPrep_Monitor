@@ -221,7 +221,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
           cachePath = cachePath,
           userTags = c("occurrencePrepGerHabitat", spClean, as.character(yr)))
 
-        if (is.null(result)) next
+        if (isCachedNull(result)) next
 
         saveRDS(result, outFile)
         message("Saved -> ", outFile)

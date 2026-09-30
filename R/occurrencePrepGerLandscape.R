@@ -327,7 +327,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
         cachePath = cachePath,
         userTags = c("occurrencePrepGerLandscape", spClean, as.character(yr)))
 
-      if (is.null(result)) next
+      if (isCachedNull(result)) next
 
       saveRDS(result, outFile)
       message("  Saved -> ", outFile)
