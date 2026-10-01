@@ -88,6 +88,25 @@
 #'   species only triggers recompute for that species. NULL falls back to
 #'   a temp directory, for standalone/test calls where persistence across
 #'   sessions doesn't matter.
+#' ASCII-fold German umlauts/eszett so German-name matching survives even if
+#' speciesCanonical.csv's german_name column (routinely hand-edited) ends up
+#' with a mis-encoded or lost special character -- confirmed 2026-10-01 as a
+#' real, recurring failure mode (Buteo buteo's "ae" and Lanius collurio's
+#' "oe" each broke this way, independently, on separate occasions). Applied
+#' to BOTH sides of every German-name comparison in this file, so it doesn't
+#' matter whether the mismatch originates from speciesCanonical.csv or from
+#' the raw DDA/MhB data (which always use real UTF-8 umlauts and are not
+#' ours to change). \u escapes are used instead of literal accented
+#' characters so this function's own source stays pure ASCII and can never
+#' itself be corrupted by a future save in the wrong encoding.
+foldGermanUmlauts <- function(x) {
+  x <- gsub("ä", "ae", x); x <- gsub("Ä", "Ae", x)
+  x <- gsub("ö", "oe", x); x <- gsub("Ö", "Oe", x)
+  x <- gsub("ü", "ue", x); x <- gsub("Ü", "Ue", x)
+  x <- gsub("ß", "ss", x)
+  x
+}
+
 #' @return Invisibly, a named character vector of output file paths.
 occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath,
                                         probeflaechenShpPath, processedRoot,
@@ -113,7 +132,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
   # Reproduces speciesLookup()'s old data.frame shape (german/latin columns)
   # so the rest of this function -- written against that shape -- needs no
   # further changes beyond this one substitution.
-  lookup <- data.frame(german = unname(germanNames[species]), latin = species,
+  lookup <- data.frame(german = foldGermanUmlauts(unname(germanNames[species])), latin = species,
                         stringsAsFactors = FALSE)
 
   mhbRoutedSpecies <- if (!is.null(perSpeciesDataSource)) {
@@ -154,7 +173,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
     message("Cleaning DDA data...")
     territories <- territories |>
-      dplyr::mutate(species = enc2utf8(`Art deutsch`),
+      dplyr::mutate(species = foldGermanUmlauts(enc2utf8(`Art deutsch`)),
                      ROUTENCODE = tolower(ROUTENCODE),
                      Jahr = as.character(format(Countdate, "%Y")))
 
@@ -204,7 +223,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     mhbRaw <- mhbRaw |>
       dplyr::mutate(date = as.Date(DATE_TIME, "%Y-%m-%d"),
                      year = as.integer(format(date, "%Y")),
-                     month = format(date, "%m"))
+                     month = format(date, "%m"),
+                     SPECIES_NAME_GERMAN = foldGermanUmlauts(SPECIES_NAME_GERMAN))
 
     focalGermanMhB <- lookup$german[lookup$latin %in% mhbRoutedSpecies]
 
