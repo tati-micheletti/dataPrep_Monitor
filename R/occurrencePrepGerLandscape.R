@@ -40,7 +40,14 @@
 #'   `scaleLabel()`, is appended internally).
 #' @param outputDir Character. Directory to save per-species-year RDS files in.
 #' @param species Character vector of Latin species names to process.
-#' @param landscapeYears Integer vector of years to process.
+#' @param landscapeYears Named list, species -> integer vector of years to
+#'   process for that species (e.g. from `resolveYearsPerSpecies()`,
+#'   `sharedSpeciesConfig.R`) -- every species' own years can differ (e.g.
+#'   Buteo buteo/Sturnus vulgaris's real MhB point-count data is negligible
+#'   before ~2020, while DDA-territories species genuinely span the full
+#'   shared default range). The raw DDA/MhB filters below operate on the
+#'   UNION of every species' years; each species' own loop further down
+#'   only visits its own years.
 #' @param resolutionConfig Named list, species -> scale -> resolution (m), or
 #'   NULL (default). See `dataPrep_Monitor`'s parameter of the same name.
 #' @param sharedResolutionM Numeric. Shared default landscape resolution (m),
@@ -123,6 +130,11 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
 
+  # Union of every species' own years -- the raw DDA/MhB filters below need
+  # every year ANY species actually uses; each species' own loop further
+  # down then only visits its own years.
+  unionYears <- sort(unique(unlist(landscapeYears[species], use.names = FALSE)))
+
   missingGerman <- setdiff(species, names(germanNames))
   if (length(missingGerman) > 0) {
     stop("occurrencePrepGerLandscape(): no germanNames entry for: ",
@@ -182,8 +194,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                      Jahr = as.character(Jahr)) |>
       tidyr::unite("route_yr", ROUTENCODE, Jahr, remove = FALSE)
 
-    visits <- visits |> dplyr::filter(Jahr %in% as.character(landscapeYears))
-    territories <- territories |> dplyr::filter(Jahr %in% as.character(landscapeYears))
+    visits <- visits |> dplyr::filter(Jahr %in% as.character(unionYears))
+    territories <- territories |> dplyr::filter(Jahr %in% as.character(unionYears))
 
     message("Building presence/absence matrix...")
     focalGerman <- lookup$german[lookup$latin %in% ddaRoutedSpecies]
@@ -232,7 +244,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     # applies by default (excludes the weakest "A"-with-no-number tier),
     # kept consistent since this reuses the exact same raw dataset.
     dfMhB <- mhbRaw |>
-      dplyr::filter(year %in% landscapeYears,
+      dplyr::filter(year %in% unionYears,
                      month %in% c("04", "05", "06"),
                      ATLAS_CODE %in% c("A1", "A2",
                                         "B3", "B4", "B5", "B6", "B7", "B8", "B9",
@@ -288,13 +300,17 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
   message("  Total PA records: ", nrow(occSpatial))
 
-  message("\nProcessing ", length(species), " species x ", length(landscapeYears), " years...")
+  message("\nProcessing ", length(species), " species x ", length(unionYears),
+          " years (union; each species uses its own subset)...")
 
   # Keyed by resolved resolution (m), then year -- species sharing a
-  # resolution share one cached covariate stack per year. Also lets each
-  # stack's content flow into Cache()'s digest below via `covStack`,
-  # instead of only a directory path (which wouldn't change if the raster
-  # CONTENT changes but the path doesn't).
+  # resolution share one cached covariate stack per year, built lazily
+  # (per resolution+year, the first time any species actually needs it) so
+  # species sharing a resolution but NOT the same year list still only pay
+  # for the years they individually use. Also lets each stack's content
+  # flow into Cache()'s digest below via `covStack`, instead of only a
+  # directory path (which wouldn't change if the raster CONTENT changes
+  # but the path doesn't).
   covStacksByResolution <- list()
 
   outFiles <- list()
@@ -314,11 +330,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
     resKey <- as.character(resM)
     if (is.null(covStacksByResolution[[resKey]])) {
-      covStacksByResolution[[resKey]] <- stats::setNames(
-        lapply(landscapeYears, function(yr) loadCovariates(yr, landscapeOutputDir, NULL)),
-        as.character(landscapeYears))
+      covStacksByResolution[[resKey]] <- list()
     }
-    covStacksByYear <- covStacksByResolution[[resKey]]
 
     spThinDist <- if (!is.null(perSpeciesThinDist) && spLatin %in% names(perSpeciesThinDist)) {
       perSpeciesThinDist[[spLatin]]
@@ -326,11 +339,15 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       thinDist
     }
 
-    for (yr in landscapeYears) {
+    for (yr in landscapeYears[[spLatin]]) {
 
       outFile <- file.path(outputDir, paste0(spClean, "_landscape_", yr, ".rds"))
 
-      covStack <- covStacksByYear[[as.character(yr)]]
+      yrKey <- as.character(yr)
+      if (is.null(covStacksByResolution[[resKey]][[yrKey]])) {
+        covStacksByResolution[[resKey]][[yrKey]] <- loadCovariates(yr, landscapeOutputDir, NULL)
+      }
+      covStack <- covStacksByResolution[[resKey]][[yrKey]]
       if (is.null(covStack)) {
         warning("  Covariates unavailable for ", yr, " -- skipping")
         next

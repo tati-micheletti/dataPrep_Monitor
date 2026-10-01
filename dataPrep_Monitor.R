@@ -91,10 +91,19 @@ defineModule(sim, list(
     ## Land use / land cover years -------------------------------------------------
     defineParameter("landuseYears", "numeric", 2005:2025, NA, NA,
                     "Years to process land use (crop type) maps for."),
-    defineParameter("habitatYears", "numeric", 2022:2025, NA, NA,
-                    "Years to prepare German habitat-scale (200m) occurrence data for."),
-    defineParameter("landscapeYears", "numeric", 2005:2025, NA, NA,
-                    "Years to prepare German landscape-scale (1km) occurrence data for."),
+    defineParameter("habitatYears", "list", NULL, NA, NA,
+                    "Named list, species -> integer vector of years to prepare German",
+                    "habitat-scale (200m) occurrence data for that species. Per-species",
+                    "since 2026-10-01 (e.g. Buteo buteo/Sturnus vulgaris's real MhB",
+                    "point-count data is negligible before ~2020, while other species",
+                    "genuinely span a wider range) -- see resolveYearsPerSpecies()",
+                    "(sharedSpeciesConfig.R). No default -- runMe.R must always supply a",
+                    "fully-resolved list."),
+    defineParameter("landscapeYears", "list", NULL, NA, NA,
+                    "Named list, species -> integer vector of years to prepare German",
+                    "landscape-scale occurrence data for that species. Same per-species",
+                    "rationale/mechanism as habitatYears above. No default -- runMe.R",
+                    "must always supply a fully-resolved list."),
 
     ## Species / locale -------------------------------------------------------------
     defineParameter("species", "character", NA_character_, NA, NA,

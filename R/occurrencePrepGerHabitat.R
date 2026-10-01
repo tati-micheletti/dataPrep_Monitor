@@ -28,7 +28,15 @@
 #'   `scaleLabel()`, is appended internally).
 #' @param outputDir Character. Directory to save per-species-year RDS files in.
 #' @param species Character vector of Latin species names to process.
-#' @param habitatYears Integer vector of years to process.
+#' @param habitatYears Named list, species -> integer vector of years to
+#'   process for that species (e.g. from `resolveYearsPerSpecies()`,
+#'   `sharedSpeciesConfig.R`) -- every species' own years can differ (e.g.
+#'   Buteo buteo/Sturnus vulgaris's real MhB point-count data is negligible
+#'   before ~2020, while other species' genuinely spans the full shared
+#'   default range). The raw-data filter and the covariate-stack-building
+#'   year loop below both operate on the UNION of every species' years (so
+#'   no species' real records get excluded from the initial filter), then
+#'   each species is skipped for any year outside its own list.
 #' @param resolutionConfig Named list, species -> scale -> resolution (m), or
 #'   NULL (default). See `dataPrep_Monitor`'s parameter of the same name.
 #' @param sharedResolutionM Numeric. Shared default habitat resolution (m),
@@ -71,6 +79,12 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   dir.create(outputDir, recursive = TRUE, showWarnings = FALSE)
   Sys.setlocale("LC_CTYPE", localeCtype)
 
+  # Union of every species' own years -- the raw-data filter and the
+  # covariate-stack year loop both need every year ANY species actually
+  # uses; each species is then skipped per-year further down if that year
+  # isn't in its own list.
+  unionYears <- sort(unique(unlist(habitatYears[species], use.names = FALSE)))
+
   message("Loading raw point count data...")
   # fileEncoding is explicit (not left to the process's ambient locale) because
   # this file is UTF-8 -- see the matching note in sharedSpeciesCanonical.R's
@@ -82,7 +96,8 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                    year = as.integer(format(date, "%Y")),
                    month = format(date, "%m"))
 
-  message("Filtering to ", length(habitatYears), " years, ", length(species), " species...")
+  message("Filtering to ", length(unionYears), " years (union across species), ",
+          length(species), " species...")
 
   # Filters directly on the raw MhB CSV's own SPECIES_NAME_SCIENTIFIC column
   # (it has both German and scientific names natively) -- deliberately NOT
@@ -92,7 +107,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   # silently drop a species (see speciesCanonical.csv's docstring for the
   # 2026-09-26 incident this simplification is a direct response to).
   df <- mhbRaw |>
-    dplyr::filter(year %in% habitatYears,
+    dplyr::filter(year %in% unionYears,
                    SPECIES_NAME_SCIENTIFIC %in% species,
                    TOTAL_COUNT > 0,
                    month %in% c("04", "05", "06"),
@@ -134,8 +149,8 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   # the detection that actually surveyed it belongs to a species in a
   # DIFFERENT resolution group.
   surveyedByYear <- stats::setNames(
-    lapply(habitatYears, function(yr) unique(df$AREA_NATIONAL_CODE[df$year == yr])),
-    as.character(habitatYears))
+    lapply(unionYears, function(yr) unique(df$AREA_NATIONAL_CODE[df$year == yr])),
+    as.character(unionYears))
 
   # Group species by resolved habitat resolution (usually just one group,
   # the shared default -- more than one only when a species has its own
@@ -146,8 +161,9 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   }, numeric(1))
   resGroups <- split(species, resolvedRes)
 
-  message("\nProcessing ", length(species), " species x ", length(habitatYears),
-          " years, in ", length(resGroups), " resolution group(s)...")
+  message("\nProcessing ", length(species), " species x ", length(unionYears),
+          " years (union; each species uses its own subset), in ",
+          length(resGroups), " resolution group(s)...")
 
   outFiles <- list()
 
@@ -187,17 +203,21 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
     surveyedRoutes <- dfGroup |> dplyr::distinct(AREA_NATIONAL_CODE, year)
     message("Surveyed route x year combinations: ", nrow(surveyedRoutes))
 
-    for (yr in habitatYears) {
+    for (yr in unionYears) {
 
       # Hoisted per-year (not per-species-year, as before): the covariate
       # stack doesn't depend on the focal species, so it's computed once
-      # and shared across this group's species.
+      # and shared across this group's species. Still only built if at
+      # least one of this group's species actually uses this year.
+      if (!any(vapply(groupSpecies, function(sp) yr %in% habitatYears[[sp]], logical(1)))) next
+
       surveyedThisYr <- surveyedByYear[[as.character(yr)]]
 
       covStack <- buildHabitatCovStackOneYear(yr, habitatOutputDir)
       if (is.null(covStack)) next
 
       for (sp in groupSpecies) {
+        if (!(yr %in% habitatYears[[sp]])) next
         spClean <- gsub(" ", "_", sp)
         outFile <- file.path(outputDir, paste0(spClean, "_habitat_", yr, ".rds"))
 

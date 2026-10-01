@@ -24,8 +24,12 @@
 #'   `ornitho/` (EBBA2/European), `MhB/`, and `territories/` (DDA) subfolders
 #'   are created under it.
 #' @param species Character vector of Latin species names to process.
-#' @param habitatYears Integer vector of years for the habitat SDM.
-#' @param landscapeYears Integer vector of years for the landscape SDM.
+#' @param habitatYears Named list, species -> integer vector of years for
+#'   the habitat SDM (per-species since 2026-10-01 -- see
+#'   `resolveYearsPerSpecies()` in `sharedSpeciesConfig.R`). Forwarded
+#'   as-is to `occurrencePrepGerHabitat()`.
+#' @param landscapeYears Named list, species -> integer vector of years
+#'   for the landscape SDM. Forwarded as-is to `occurrencePrepGerLandscape()`.
 #' @param localeCtype Character. Locale for German special characters.
 #' @param useThinning Logical. Should occurrence points be spatially thinned
 #'   (following Wiedenroth et al.) at all three scales? Does NOT restore
