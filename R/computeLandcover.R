@@ -25,9 +25,6 @@ computeLandcover <- function(corineYear, landcoverRawDir, processedRoot,
                               targetCRS, force = FALSE) {
 
   rawFile <- file.path(landcoverRawDir, corineRawFilename(corineYear))
-  if (!file.exists(rawFile)) {
-    stop("CORINE file not found: ", rawFile)
-  }
 
   # One entry per distinct resolution actually needed, at each scale --
   # usually 2 total (one habitat, one landscape default), more when a
@@ -61,6 +58,12 @@ computeLandcover <- function(corineYear, landcoverRawDir, processedRoot,
   }
   for (nm in names(scales)[!need]) message(nm, " cache hit -- skipping")
   for (nm in names(scales)[need]) message(nm, " needs (re)computation")
+
+  # Only needed when something must actually be computed (on EVE the raw
+  # CORINE file may be absent while every output already exists).
+  if (!file.exists(rawFile)) {
+    stop("CORINE file not found: ", rawFile)
+  }
 
   message("Loading CORINE ", corineYear, ": ", basename(rawFile))
   lc <- terra::setMinMax(terra::rast(rawFile))

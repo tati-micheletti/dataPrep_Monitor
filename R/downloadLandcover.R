@@ -19,6 +19,11 @@ downloadLandcover <- function(landcoverRawDir, bboxVec, tokenJSONPath,
                                pythonScriptPath, requirementsPath,
                                envName = "dataPrep_Monitor_env") {
 
+  if (downloadsDisabled()) {
+    message("BIRDMONITOR_SKIP_DOWNLOAD=1 -- not downloading CORINE land cover.")
+    return(invisible(landcoverRawDir))
+  }
+
   if (!file.exists(tokenJSONPath)) {
     stop("CLMS API token file not found: ", tokenJSONPath, "\n",
          "Create a free account at https://land.copernicus.eu, generate an API ",

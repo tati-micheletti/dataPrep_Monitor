@@ -161,6 +161,10 @@ defineModule(sim, list(
     defineParameter("rerunDerivedCovariates", "logical", FALSE, NA, NA,
                     "Should prepareDerivedCovariates (dist_to_woodland, landscape_",
                     "heterogeneity) be re-run even if sim$derivedCovariatePaths exists?"),
+    defineParameter("rastersOnly", "logical", FALSE, NA, NA,
+                    "If TRUE, build ONLY the predictor rasters (climate, DEM, landuse,",
+                    "landcover, derived covariates) and skip prepareOccurrenceData. Used",
+                    "to pre-build new-resolution layers on a local machine."),
     defineParameter("rerunOccurrenceData", "logical", FALSE, NA, NA,
                     "Should prepareOccurrenceData be re-run even if sim$occurrenceData exists?"),
     defineParameter("useSpatialThinning", "logical", TRUE, NA, NA,
@@ -261,7 +265,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLanduse")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLandcover")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDerivedCovariates")
-      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
+      if (!isTRUE(P(sim)$rastersOnly))
+        sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
     },
 
     prepareClimateData = {

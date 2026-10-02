@@ -41,17 +41,6 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
     rawFile <- hctmPath
   }
 
-  if (is.na(rawFile)) {
-    warning("No raw land use file found for year ", year, " -- skipping.")
-    return(invisible(NULL))
-  }
-
-  message("  Source file: ", basename(rawFile))
-
-  scheme <- getLanduseCategories(basename(rawFile))
-  categories <- scheme$cats
-  hasHedges <- scheme$has_hedges
-
   # One entry per distinct resolution actually needed, at each scale --
   # usually 2 total (one habitat, one landscape default), more when a
   # species has its own resolution_m override.
@@ -84,6 +73,19 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
   }
   for (nm in names(scales)[!need]) message("  ", nm, " cache hit -- skipping")
   for (nm in names(scales)[need]) message("  ", nm, " needs (re)computation")
+
+  # Raw file only matters when something must actually be computed (on EVE
+  # the raw maps may be absent while every output already exists).
+  if (is.na(rawFile)) {
+    warning("No raw land use file found for year ", year, " -- skipping.")
+    return(invisible(NULL))
+  }
+
+  message("  Source file: ", basename(rawFile))
+
+  scheme <- getLanduseCategories(basename(rawFile))
+  categories <- scheme$cats
+  hasHedges <- scheme$has_hedges
 
   message("  Loading and reprojecting crop type map...")
   cropMap <- terra::rast(rawFile)

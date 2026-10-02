@@ -29,9 +29,6 @@ computeDistToWoodland <- function(corineYear, landcoverRawDir, processedRoot,
                                     targetCRS, force = FALSE) {
 
   rawFile <- file.path(landcoverRawDir, corineRawFilename(corineYear))
-  if (!file.exists(rawFile)) {
-    stop("CORINE file not found: ", rawFile)
-  }
 
   scales <- c(
     lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
@@ -57,6 +54,11 @@ computeDistToWoodland <- function(corineYear, landcoverRawDir, processedRoot,
   }
   for (nm in names(scales)[!need]) message(nm, " (dist_to_woodland) cache hit -- skipping")
   for (nm in names(scales)[need]) message(nm, " (dist_to_woodland) needs (re)computation")
+
+  # Only needed when something must actually be computed.
+  if (!file.exists(rawFile)) {
+    stop("CORINE file not found: ", rawFile)
+  }
 
   message("Loading CORINE ", corineYear, " for dist_to_woodland: ", basename(rawFile))
   lc <- terra::setMinMax(terra::rast(rawFile))

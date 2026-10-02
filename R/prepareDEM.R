@@ -23,6 +23,15 @@ prepareDEM <- function(demRawDir, processedDir, processedRoot, bboxVec, targetCR
                         habitatResolutions, landscapeResolutions,
                         pythonScriptPath, requirementsPath, force = FALSE) {
 
+  # Every per-scale output already there -> nothing to do. Returns before
+  # touching Python, the raw tiles or the 30 m intermediates (processDEM()
+  # would reopen those even when only the aggregated outputs are needed).
+  outFiles <- demScaleOutputFiles(processedRoot, habitatResolutions, landscapeResolutions)
+  if (!force && all(vapply(outFiles, isValidRasterFile, logical(1)))) {
+    message("DEM: all ", length(outFiles), " per-scale outputs already exist -- skipping.")
+    return(invisible(as.list(outFiles)))
+  }
+
   downloadDEM(demRawDir = demRawDir,
               bboxVec = bboxVec,
               pythonScriptPath = pythonScriptPath,
@@ -35,4 +44,21 @@ prepareDEM <- function(demRawDir, processedDir, processedRoot, bboxVec, targetCR
              habitatResolutions = habitatResolutions,
              landscapeResolutions = landscapeResolutions,
              force = force)
+}
+
+#' Expected per-scale DEM output files (elevation/slope/solar_radiation x
+#' every habitat/landscape resolution), named as `processDEM()` writes them.
+#' @return Named character vector of file paths.
+demScaleOutputFiles <- function(processedRoot, habitatResolutions, landscapeResolutions) {
+  scales <- c(lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
+              lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r)))
+  files <- character()
+  for (s in scales) {
+    leaf <- scaleLabel(s$res)
+    for (layerName in c("elevation", "slope", "solar_radiation")) {
+      key <- paste(paste0(s$scaleName, "_", s$res), layerName)
+      files[key] <- file.path(processedRoot, leaf, paste0(layerName, "_", s$scaleName, "_", leaf, ".tif"))
+    }
+  }
+  files
 }
