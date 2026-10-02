@@ -29,32 +29,33 @@ processDEM <- function(demRawDir, processedDir, processedRoot, targetCRS,
 
   dir.create(processedDir, recursive = TRUE, showWarnings = FALSE)
 
-  # Step 1: Virtual mosaic
-  message("Step 1: Building virtual mosaic from GLO-30 tiles...")
+  dem30mPath <- file.path(processedDir, "dem_30m_laea.tif")
   vrtPath <- file.path(processedDir, "dem_mosaic.vrt")
 
-  if (force || !file.exists(vrtPath)) {
-    tileFiles <- list.files(demRawDir, pattern = "\\.tif$", full.names = TRUE)
-    message("  Found ", length(tileFiles), " tiles.")
-    terra::vrt(tileFiles, vrtPath)
-    message("  VRT created: ", vrtPath)
-  } else {
-    message("  Already exists, skipping: ", vrtPath)
-  }
-
-  demVrt <- terra::rast(vrtPath)
-
-  # Step 2: Reproject to target CRS at 30m
-  message("Step 2: Reprojecting to ", targetCRS, " at 30m...")
-  dem30mPath <- file.path(processedDir, "dem_30m_laea.tif")
-
+  # Steps 1-2 only matter when the 30m DEM has to be (re)built. If it is already
+  # there (e.g. copied to EVE without the 41 GB of raw tiles), skip both: the
+  # mosaic and the raw tiles are never touched.
   if (force || !isValidRasterFile(dem30mPath)) {
+    # Step 1: Virtual mosaic
+    message("Step 1: Building virtual mosaic from GLO-30 tiles...")
+    if (force || !file.exists(vrtPath)) {
+      tileFiles <- list.files(demRawDir, pattern = "[.]tif$", full.names = TRUE)
+      message("  Found ", length(tileFiles), " tiles.")
+      terra::vrt(tileFiles, vrtPath)
+      message("  VRT created: ", vrtPath)
+    } else {
+      message("  Already exists, skipping: ", vrtPath)
+    }
+    demVrt <- terra::rast(vrtPath)
+
+    # Step 2: Reproject to target CRS at 30m
+    message("Step 2: Reprojecting to ", targetCRS, " at 30m...")
     dem30m <- terra::project(demVrt, targetCRS, res = 30, method = "bilinear")
     names(dem30m) <- "elevation"
     terra::writeRaster(dem30m, dem30mPath, overwrite = TRUE)
     message("  Saved: ", dem30mPath)
   } else {
-    message("  Already exists, skipping: ", dem30mPath)
+    message("Steps 1-2: 30m DEM already exists, skipping: ", dem30mPath)
   }
 
   dem30m <- terra::rast(dem30mPath)
