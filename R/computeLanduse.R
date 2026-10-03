@@ -90,7 +90,7 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
   message("  Loading and reprojecting crop type map...")
   cropMap <- terra::rast(rawFile)
   # method = "near" critical for categorical data
-  cropMap <- terra::project(cropMap, targetCRS, method = "near")
+  cropMap <- projectIfNeeded(cropMap, targetCRS, method = "near")
 
   message("  Computing ", length(categories), " category proportions + hedges layer...")
 

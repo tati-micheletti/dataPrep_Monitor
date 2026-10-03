@@ -88,7 +88,7 @@ computeDistToWoodland <- function(corineYear, landcoverRawDir, processedRoot,
     s <- scales[[nm]]
     fact <- round(s$res / terra::res(distNative)[1])
     distAgg <- terra::aggregate(distNative, fact = fact, fun = "mean", na.rm = TRUE)
-    distProj <- terra::project(distAgg, targetCRS, res = s$res, method = "bilinear")
+    distProj <- regridToResolution(distAgg, s$res, targetCRS, method = "bilinear")
     names(distProj) <- "dist_to_woodland"
     terra::writeRaster(distProj, outFiles[[nm]], overwrite = TRUE)
     message("  Saved ", nm, ": ", outFiles[[nm]])
