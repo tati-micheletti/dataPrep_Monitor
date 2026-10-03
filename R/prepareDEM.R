@@ -46,8 +46,9 @@ prepareDEM <- function(demRawDir, processedDir, processedRoot, bboxVec, targetCR
              force = force)
 }
 
-#' Expected per-scale DEM output files (elevation/slope/solar_radiation x
-#' every habitat/landscape resolution), named as `processDEM()` writes them.
+#' Expected per-scale DEM output files, named as `processDEM()` writes them:
+#' elevation + slope at every habitat/landscape resolution, plus solar_radiation
+#' at habitat resolutions only (it is just the habitat reference grid).
 #' @return Named character vector of file paths.
 demScaleOutputFiles <- function(processedRoot, habitatResolutions, landscapeResolutions) {
   scales <- c(lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
@@ -55,7 +56,8 @@ demScaleOutputFiles <- function(processedRoot, habitatResolutions, landscapeReso
   files <- character()
   for (s in scales) {
     leaf <- scaleLabel(s$res)
-    for (layerName in c("elevation", "slope", "solar_radiation")) {
+    layers <- if (s$scaleName == "habitat") c("elevation", "slope", "solar_radiation") else c("elevation", "slope")
+    for (layerName in layers) {
       key <- paste(paste0(s$scaleName, "_", s$res), layerName)
       files[key] <- file.path(processedRoot, leaf, paste0(layerName, "_", s$scaleName, "_", leaf, ".tif"))
     }

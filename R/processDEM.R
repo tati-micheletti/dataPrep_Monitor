@@ -76,18 +76,33 @@ processDEM <- function(demRawDir, processedDir, processedRoot, targetCRS,
   }
   slope30m <- terra::rast(slope30mPath)
 
-  solar30mPath <- file.path(processedDir, "solar_rad_30m_laea.tif")
-  if (force || !isValidRasterFile(solar30mPath)) {
-    message("  Computing solar radiation aspect index (trasp)...")
-    message("  (May take 20-40 minutes at 30m)")
-    solar30m <- spatialEco::trasp(dem30m)
-    names(solar30m) <- "solar_radiation"
-    terra::writeRaster(solar30m, solar30mPath, overwrite = TRUE)
-    message("  Saved: ", solar30mPath)
+  # Solar radiation is NOT a predictor (DECISIONS.md, 2026-09-26); it is only
+  # kept as the reference grid at HABITAT resolution. So it is produced for
+  # habitat scales only, and the 30m solar file (50 GB) is only needed when one
+  # of those habitat outputs is missing -- landscape scales never need it.
+  habitatSolarFiles <- vapply(habitatResolutions, function(r) {
+    leaf <- scaleLabel(r)
+    file.path(processedRoot, leaf, paste0("solar_radiation_habitat_", leaf, ".tif"))
+  }, character(1))
+  needSolar <- force || !all(vapply(habitatSolarFiles, isValidRasterFile, logical(1)))
+
+  solar30m <- NULL
+  if (needSolar) {
+    solar30mPath <- file.path(processedDir, "solar_rad_30m_laea.tif")
+    if (force || !isValidRasterFile(solar30mPath)) {
+      message("  Computing solar radiation aspect index (trasp)...")
+      message("  (May take 20-40 minutes at 30m)")
+      solar30m <- spatialEco::trasp(dem30m)
+      names(solar30m) <- "solar_radiation"
+      terra::writeRaster(solar30m, solar30mPath, overwrite = TRUE)
+      message("  Saved: ", solar30mPath)
+    } else {
+      message("  Already exists, skipping: ", solar30mPath)
+    }
+    solar30m <- terra::rast(solar30mPath)
   } else {
-    message("  Already exists, skipping: ", solar30mPath)
+    message("  Habitat-scale solar radiation outputs already exist -- 30m solar not needed.")
   }
-  solar30m <- terra::rast(solar30mPath)
 
   # Step 4: Aggregate to every distinct resolution actually needed, at
   # each scale -- usually 2 total (one habitat, one landscape default),
@@ -105,14 +120,19 @@ processDEM <- function(demRawDir, processedDir, processedRoot, targetCRS,
   names(scales) <- vapply(scales, function(s) paste0(s$scaleName, "_", s$res), character(1))
   for (s in scales) dir.create(s$dir, recursive = TRUE, showWarnings = FALSE)
 
-  derivatives <- list(elevation = dem30m, slope = slope30m, solar_radiation = solar30m)
+  derivatives <- list(elevation = dem30m, slope = slope30m)
+  if (!is.null(solar30m)) derivatives$solar_radiation <- solar30m
+  # Layers per scale: solar radiation only at habitat scale (see above).
+  layersForScale <- function(scaleName) {
+    if (scaleName == "habitat") names(derivatives) else setdiff(names(derivatives), "solar_radiation")
+  }
 
   outFiles <- list()
   for (scaleKey in names(scales)) {
     scaleCfg <- scales[[scaleKey]]
     message("\n  Scale: ", scaleKey, " (", scaleCfg$res, "m)")
 
-    for (layerName in names(derivatives)) {
+    for (layerName in layersForScale(scaleCfg$scaleName)) {
       outFiles[[paste(scaleKey, layerName)]] <- aggregateAndSave(
         rast30m = derivatives[[layerName]],
         scaleName = scaleCfg$scaleName,
@@ -130,7 +150,7 @@ processDEM <- function(demRawDir, processedDir, processedRoot, targetCRS,
     scaleCfg <- scales[[scaleKey]]
     message("\n  --- ", toupper(scaleKey), " (", scaleCfg$res, "m) ---")
 
-    for (layerName in names(derivatives)) {
+    for (layerName in layersForScale(scaleCfg$scaleName)) {
       outFile <- file.path(scaleCfg$dir, paste0(layerName, "_", scaleCfg$scaleName, "_", basename(scaleCfg$dir), ".tif"))
       if (file.exists(outFile)) {
         r <- terra::rast(outFile)
