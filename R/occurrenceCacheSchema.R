@@ -6,7 +6,8 @@
 #' cached occurrence tables wrong, and every occurrence table is recomputed on the next run. Passed
 #' as `.cacheExtra` in occurrencePrepEurope/GerHabitat/GerLandscape.
 #'
-#' History: 1 = original; 2 = 2026-10-05, after the EVE move (new covariates, per-species years).
+#' History: 1 = original; 2 = 2026-10-05, after the EVE move (new covariates, per-species years);
+#' 3 = 2026-10-05, x/y axis-swap fix (transformToLAEA()) -- tables built before this are wrong on EVE.
 #'
 #' @format Integer scalar.
-occurrenceCacheSchema <- 2L
+occurrenceCacheSchema <- 3L

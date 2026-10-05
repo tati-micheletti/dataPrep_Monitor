@@ -124,12 +124,12 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
 
   message("\nLoading Probeflaechen shapefile...")
   pf <- sf::st_read(probeflaechenShpPath, quiet = TRUE) |>
-    sf::st_transform(3035) |>
+    transformToLAEA() |>
     dplyr::rename(AREA_NATIONAL_CODE = SITE_ID) |>
     dplyr::mutate(AREA_NATIONAL_CODE = tolower(AREA_NATIONAL_CODE))
 
   pfCentroids <- sf::st_centroid(pf)
-  pfCoords <- sf::st_coordinates(pfCentroids)
+  pfCoords <- laeaCoordinates(pfCentroids, "Probeflaechen centroids")
   pf$x_cent <- pfCoords[, 1]
   pf$y_cent <- pfCoords[, 2]
 
@@ -137,9 +137,9 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
 
   message("\nReprojecting presences to EPSG:3035...")
   dfSf <- sf::st_as_sf(df, coords = c("LONGITUDE", "LATITUDE"), crs = 4326) |>
-    sf::st_transform(3035)
+    transformToLAEA()
 
-  coords3035 <- sf::st_coordinates(dfSf)
+  coords3035 <- laeaCoordinates(dfSf, "MhB presence records")
   df$x <- coords3035[, 1]
   df$y <- coords3035[, 2]
 

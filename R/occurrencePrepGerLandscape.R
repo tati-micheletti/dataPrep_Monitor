@@ -161,8 +161,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
   message("Loading Probeflaechen shapefile...")
   probeflaechen <- sf::st_read(probeflaechenShpPath, quiet = TRUE)
-  probeflaechen <- sf::st_transform(probeflaechen, 3035)
-  coords <- sf::st_coordinates(sf::st_centroid(probeflaechen))
+  probeflaechen <- transformToLAEA(probeflaechen)
+  coords <- laeaCoordinates(sf::st_centroid(probeflaechen), "Probeflaechen centroids (landscape)")
   probeflaechen$x <- coords[, 1]
   probeflaechen$y <- coords[, 2]
 
