@@ -12,14 +12,59 @@
 #' `st_transform(x, 3035)` where that works.
 laeaCRSProj4 <- "+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 
-#' Transform an sf object to ETRS89-LAEA without axis-order ambiguity
+#' Do most coordinates fall in Germany's EPSG:3035 bounding box?
+#' @param xy Numeric matrix, columns x, y.
+#' @return Logical.
+laeaLooksLikeGermany <- function(xy) {
+  mean(xy[, 1] > 3.9e6 & xy[, 1] < 4.8e6 & xy[, 2] > 2.6e6 & xy[, 2] < 3.7e6, na.rm = TRUE) >= 0.5
+}
+
+#' Transform an sf object to ETRS89-LAEA (EPSG:3035), robust to axis-order problems
 #'
-#' @param x sf object.
-#' @return sf object in EPSG:3035 (easting/northing numbers), labelled `EPSG:3035`.
+#' Tries independent methods in turn -- an explicit PROJ string, `EPSG:3035`, and `terra` -- and uses the
+#' FIRST whose result falls in Germany's bounding box (the data are German by construction). On EVE's full
+#' SpaDES session a plain `st_transform(x, 3035)` returned swapped x/y and a PROJ-string transform returned
+#' nonsense for the shapefile, although a plain R session loading the same packages was fine (see
+#' DECISIONS.md, 2026-10-05), so the cause could not be isolated from outside. This function does not depend
+#' on it, logs which method was used, and when none works it stops with the input CRS/bounding box and every
+#' method's result so the session can be diagnosed from the log.
+#'
+#' @param x sf object (any geometry) in a known CRS (e.g. 4326 or 25832).
+#' @return sf object labelled EPSG:3035 with easting/northing numbers.
 transformToLAEA <- function(x) {
-  out <- sf::st_transform(x, laeaCRSProj4)
-  suppressWarnings(sf::st_crs(out) <- 3035)   # label only: same definition, numbers stay easting/northing
-  out
+  methods <- list(
+    projString = function() sf::st_transform(x, laeaCRSProj4),
+    epsg3035 = function() sf::st_transform(x, 3035),
+    terra = function() sf::st_as_sf(terra::project(terra::vect(x), "EPSG:3035")))
+  rng <- function(v) paste(round(range(v, na.rm = TRUE)), collapse = "..")
+  log <- character()
+  for (nm in names(methods)) {
+    out <- tryCatch(suppressWarnings(methods[[nm]]()), error = function(e) {
+      log <<- c(log, paste0(nm, ": ERROR ", conditionMessage(e))); NULL })
+    if (is.null(out)) next
+    xy <- tryCatch(sf::st_coordinates(suppressWarnings(sf::st_centroid(sf::st_geometry(out))))[, 1:2, drop = FALSE],
+                   error = function(e) NULL)
+    if (is.null(xy)) { log <- c(log, paste0(nm, ": no coordinates")); next }
+    ok <- laeaLooksLikeGermany(xy)
+    log <- c(log, sprintf("%s: x %s, y %s -> %s", nm, rng(xy[, 1]), rng(xy[, 2]), if (ok) "OK" else "rejected"))
+    if (ok) {
+      message("transformToLAEA: using method '", nm, "' (", sum(grepl("rejected|ERROR", log)), " rejected before)")
+      suppressWarnings(sf::st_crs(out) <- 3035)
+      return(out)
+    }
+  }
+  bb <- tryCatch(sf::st_bbox(x), error = function(e) NULL)
+  stop("[COORDINATE ERROR] transformToLAEA(): no method produced coordinates inside Germany's EPSG:3035 box.
+",
+       "  input CRS: ", tryCatch(sf::st_crs(x)$input, error = function(e) "?"),
+       " | input bbox: ", if (is.null(bb)) "?" else paste(round(bb, 2), collapse = " "), "
+  ",
+       paste(log, collapse = "
+  "), "
+  env: OSR_DEFAULT_AXIS_MAPPING_STRATEGY='",
+       Sys.getenv("OSR_DEFAULT_AXIS_MAPPING_STRATEGY"), "' PROJ_DATA='", Sys.getenv("PROJ_DATA"),
+       "' PROJ_LIB='", Sys.getenv("PROJ_LIB"), "' sf ", as.character(utils::packageVersion("sf")),
+       " PROJ ", sf::sf_extSoftVersion()[["PROJ"]], " GDAL ", sf::sf_extSoftVersion()[["GDAL"]], call. = FALSE)
 }
 
 #' Get easting/northing from an sf object, and STOP if they look swapped
