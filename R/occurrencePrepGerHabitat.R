@@ -241,7 +241,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
           buildHabitatSpeciesYear, sp = sp, yr = yr, spPres = spPres,
           surveyedThisYr = surveyedThisYr, pf = pf, refRaster = refRaster,
           covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
-          cachePath = cachePath,
+          cachePath = cachePath, .cacheExtra = list(schema = occurrenceCacheSchema),
           userTags = c("occurrencePrepGerHabitat", spClean, as.character(yr)))
 
         if (isCachedNull(result)) next

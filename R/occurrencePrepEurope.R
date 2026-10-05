@@ -112,7 +112,7 @@ occurrencePrepEurope <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     result <- reproducible::Cache(
       buildEuropeSpecies, sp = sp, spOcc = spOcc, bioclim = bioclim,
       allEnvClean = allEnvClean, useThinning = useThinning, thinDist = spThinDist,
-      cachePath = cachePath,
+      cachePath = cachePath, .cacheExtra = list(schema = occurrenceCacheSchema),
       userTags = c("occurrencePrepEurope", spClean))
 
     if (is.null(result)) next

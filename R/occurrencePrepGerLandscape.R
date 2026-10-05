@@ -367,7 +367,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       result <- reproducible::Cache(
         buildLandscapeSpeciesYear, spLatin = spLatin, yr = yr, spYr = spYr,
         covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
-        cachePath = cachePath,
+        cachePath = cachePath, .cacheExtra = list(schema = occurrenceCacheSchema),
         userTags = c("occurrencePrepGerLandscape", spClean, as.character(yr)))
 
       if (isCachedNull(result)) next
