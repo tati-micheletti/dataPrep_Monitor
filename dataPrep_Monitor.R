@@ -270,6 +270,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareClimateData = {
+      reportAxisState("start of prepareClimateData")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$bioclimPaths) || P(sim)$rerunClimateData) {
         sim$bioclimPaths <- prepareClimateData(
@@ -286,6 +287,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareDEM = {
+      reportAxisState("start of prepareDEM")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$demPaths) || P(sim)$rerunDEM) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -306,6 +308,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareLanduse = {
+      reportAxisState("start of prepareLanduse")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landusePaths) || P(sim)$rerunLanduse) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -325,6 +328,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareLandcover = {
+      reportAxisState("start of prepareLandcover")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landcoverPaths) || P(sim)$rerunLandcover) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -345,6 +349,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareDerivedCovariates = {
+      reportAxisState("start of prepareDerivedCovariates")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$derivedCovariatePaths) || P(sim)$rerunDerivedCovariates) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -373,6 +378,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareOccurrenceData = {
+      reportAxisState("start of prepareOccurrenceData")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$occurrenceData) || P(sim)$rerunOccurrenceData) {
         windowStart <- P(sim)$ebba2TrainingYear - (P(sim)$climateWindowLength - 1)

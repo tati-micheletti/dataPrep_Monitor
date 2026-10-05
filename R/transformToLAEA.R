@@ -19,6 +19,13 @@ laeaLooksLikeGermany <- function(xy) {
   mean(xy[, 1] > 3.9e6 & xy[, 1] < 4.8e6 & xy[, 2] > 2.6e6 & xy[, 2] < 3.7e6, na.rm = TRUE) >= 0.5
 }
 
+#' Do most coordinates fall in Germany's EPSG:3035 box only AFTER swapping x and y?
+#' @param xy Numeric matrix, columns x, y.
+#' @return Logical.
+laeaLooksSwapped <- function(xy) {
+  mean(xy[, 2] > 3.9e6 & xy[, 2] < 4.8e6 & xy[, 1] > 2.6e6 & xy[, 1] < 3.7e6, na.rm = TRUE) >= 0.5
+}
+
 #' Transform an sf object to ETRS89-LAEA (EPSG:3035), robust to axis-order problems
 #'
 #' Tries independent methods in turn -- an explicit PROJ string, `EPSG:3035`, and `terra` -- and uses the
@@ -38,6 +45,7 @@ transformToLAEA <- function(x) {
     terra = function() sf::st_as_sf(terra::project(terra::vect(x), "EPSG:3035")))
   rng <- function(v) paste(round(range(v, na.rm = TRUE)), collapse = "..")
   log <- character()
+  swapCandidate <- NULL
   for (nm in names(methods)) {
     out <- tryCatch(suppressWarnings(methods[[nm]]()), error = function(e) {
       log <<- c(log, paste0(nm, ": ERROR ", conditionMessage(e))); NULL })
@@ -46,12 +54,24 @@ transformToLAEA <- function(x) {
                    error = function(e) NULL)
     if (is.null(xy)) { log <- c(log, paste0(nm, ": no coordinates")); next }
     ok <- laeaLooksLikeGermany(xy)
-    log <- c(log, sprintf("%s: x %s, y %s -> %s", nm, rng(xy[, 1]), rng(xy[, 2]), if (ok) "OK" else "rejected"))
+    sw <- !ok && laeaLooksSwapped(xy)
+    log <- c(log, sprintf("%s: x %s, y %s -> %s", nm, rng(xy[, 1]), rng(xy[, 2]),
+                          if (ok) "OK" else if (sw) "SWAPPED (fits Germany after swapping x and y)" else "rejected"))
+    if (sw && is.null(swapCandidate)) swapCandidate <- out
     if (ok) {
       message("transformToLAEA: using method '", nm, "' (", sum(grepl("rejected|ERROR", log)), " rejected before)")
       suppressWarnings(sf::st_crs(out) <- 3035)
       return(out)
     }
+  }
+  if (!is.null(swapCandidate)) {
+    # A consistent x/y swap (northing/easting returned instead of easting/northing): correct it, loudly.
+    message("transformToLAEA: the transformation returned x and y SWAPPED in this session (axis order); ",
+            "swapping them back. Log: ", paste(log, collapse = " | "))
+    out <- swapCandidate
+    sf::st_geometry(out) <- sf::st_geometry(out) * matrix(c(0, 1, 1, 0), 2, 2)
+    suppressWarnings(sf::st_crs(out) <- 3035)
+    return(out)
   }
   bb <- tryCatch(sf::st_bbox(x), error = function(e) NULL)
   stop("[COORDINATE ERROR] transformToLAEA(): no method produced coordinates inside Germany's EPSG:3035 box.
