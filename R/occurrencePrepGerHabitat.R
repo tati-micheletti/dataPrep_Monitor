@@ -438,6 +438,7 @@ buildHabitatSpeciesYear <- function(sp, yr, spPres, surveyedThisYr, pf, refRaste
   paEnv <- paEnv[stats::complete.cases(paEnv[, nonHedge]), ]
   if (nBefore > nrow(paEnv)) {
     message("Removed ", nBefore - nrow(paEnv), " rows with NA covariates")
+    reportDroppedRows(nBefore, nrow(paEnv), envVals, coordsMat, paste(sp, yr, "(habitat)"))
   }
 
   if (sum(paEnv$occurrence == 1) < 10) {

@@ -427,6 +427,7 @@ buildLandscapeSpeciesYear <- function(spLatin, yr, spYr, covStack, useThinning, 
 
   if (nBefore > nAfter) {
     message("  Removed ", nBefore - nAfter, " rows with NA covariates")
+    reportDroppedRows(nBefore, nAfter, envVals, coordsMat, paste(spLatin, yr, "(landscape)"))
   }
 
   if (sum(spYrEnv$occurrence == 1) < 10) {
