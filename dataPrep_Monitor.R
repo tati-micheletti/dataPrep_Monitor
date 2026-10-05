@@ -256,6 +256,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
   switch(
     eventType,
     init = {
+      warmUpSfProj()   # sf must touch GDAL/PROJ before terra does (axis-order issue on EVE; see warmUpSfProj.R)
       if (identical(P(sim)$species, NA_character_)) {
         stop("dataPrep_Monitor's species parameter must be supplied explicitly ",
              "(e.g. sharedSpecies from sharedConfig.R) -- no default roster.")
