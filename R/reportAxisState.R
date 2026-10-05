@@ -6,6 +6,17 @@
 #'
 #' @param label Character. Where it is called from.
 #' @return Invisibly NULL.
+# Shared libraries of the geo stack that this R process has actually loaded (Linux only). Two different
+# libproj/libgdal files in one process = mixed installations (cf. rspatial/terra#1378).
+loadedGeoLibsDP <- function() {
+  tryCatch({
+    if (!file.exists("/proc/self/maps")) return("n/a (not Linux)")
+    m <- readLines("/proc/self/maps", warn = FALSE)
+    p <- sub("^.* ", "", m[grepl("lib(proj|gdal|geos|sqlite3|netcdf|hdf5)[^/]*[.]so", m)])
+    paste(sort(unique(p)), collapse = "; ")
+  }, error = function(e) paste("?", conditionMessage(e)))
+}
+
 reportAxisState <- function(label) {
   tryCatch({
     p <- sf::st_as_sf(data.frame(lon = 11.5, lat = 48.1), coords = c("lon", "lat"), crs = 4326)
@@ -16,6 +27,8 @@ reportAxisState <- function(label) {
     message("[axis] ", label, ": (11.5E, 48.1N) -> EPSG:3035 x=", round(xy[1, 1]), " y=", round(xy[1, 2]),
             if (xy[1, 1] < xy[1, 2]) "  <<< SWAPPED" else "  (ok)",
             " | GDAL axis-strategy config='", cfg, "' | PROJ network=", net)
+    message("[axis-libs] ", label, ": ", loadedGeoLibsDP(), " | PROJ_DATA='", Sys.getenv("PROJ_DATA"), "' PROJ_LIB='",
+            Sys.getenv("PROJ_LIB"), "' proj search paths: ", tryCatch(paste(sf::sf_proj_search_paths(), collapse = ","), error = function(e) "?"))
   }, error = function(e) message("[axis] ", label, ": check failed: ", conditionMessage(e)))
   invisible(NULL)
 }
