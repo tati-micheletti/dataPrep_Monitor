@@ -5,6 +5,17 @@
 #' for prec throughout, and for tasmin/tasmax after `monthlyMaxYr`, and
 #' as a fallback if the monthly file fails to open).
 #'
+#' Daily aggregation (fixed 2026-10-07; DECISIONS.md): tasmin/tasmax are the MEAN of
+#' the daily minima/maxima, which is what CHELSA's monthly product (and the bioclim
+#' definition) means. Until then they were the MIN of the daily minima and the MAX of
+#' the daily maxima, which made every month from 2022 on about 4 K colder (tasmin) and
+#' 5 K warmer (tasmax) than the months up to 2021 -- a break at the source change. Daily
+#' layers are also cleaned of fill values (a few 2022/2025 months contained 0 or 6553.4),
+#' and a month with fewer than 90% of its days is NOT used (partial months bias a mean
+#' and a sum). Months aggregated this way from daily data after `monthlyMaxYr` are cached
+#' under a NEW file name (`<variable>_<year>_<month>_dmean.tif`), so caches written by
+#' the old rule are never reused and need no deleting.
+#'
 #' @param variable Character. One of "tasmin", "tasmax", "prec".
 #' @param year Integer.
 #' @param month Integer, 1-12.
@@ -18,12 +29,14 @@
 getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
                             europeBbox, chelsaBase, monthlyMaxYr = 2021L) {
 
+  useMonthlySource <- variable %in% c("tasmin", "tasmax") && year <= monthlyMaxYr
+  # tasmin/tasmax after the monthly source ends: daily mean (new name, see above)
+  dailyMeanTemp <- variable %in% c("tasmin", "tasmax") && year > monthlyMaxYr
+
   outFile <- file.path(chelsaMonthlyDir,
-                        sprintf("%s_%d_%02d.tif", variable, year, month))
+                        sprintf("%s_%d_%02d%s.tif", variable, year, month, if (dailyMeanTemp) "_dmean" else ""))
 
   if (isValidRasterFile(outFile)) return(invisible(outFile))
-
-  useMonthlySource <- variable %in% c("tasmin", "tasmax") && year <= monthlyMaxYr
 
   if (useMonthlySource) {
 
@@ -52,9 +65,11 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
   # Daily aggregation: used for prec (all years), tasmin/tasmax 2022+,
   # and as fallback if the monthly file failed
   dailyVar <- if (variable == "prec") "prec" else variable
+  # tasmin/tasmax: the monthly value is the MEAN of the daily minima/maxima (CHELSA's monthly
+  # definition); prec: the monthly total.
   fun <- switch(variable,
-                tasmin = "min",
-                tasmax = "max",
+                tasmin = "mean",
+                tasmax = "mean",
                 prec   = "sum")
 
   message("Daily aggregation: ", variable, " ", year, "/", sprintf("%02d", month))
@@ -68,7 +83,10 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
       NULL
     })
     if (is.null(r)) return(NULL)
-    terra::crop(r, europeBbox)
+    r <- terra::crop(r, europeBbox)
+    # fill values (seen: 0 and 6553.4 in temperature, i.e. 65534 x 0.1) become NA instead of data
+    if (variable == "prec") terra::clamp(r, lower = 0, upper = 2000, values = FALSE)
+    else terra::clamp(r, lower = 150, upper = 350, values = FALSE)
   })
 
   dailyLayers <- dailyLayers[!sapply(dailyLayers, is.null)]
@@ -80,8 +98,12 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
   }
   if (nRetrieved < nDays) {
     warning("Only ", nRetrieved, "/", nDays, " days retrieved for ",
-            variable, " ", year, "/", sprintf("%02d", month),
-            " -- monthly value based on partial data")
+            variable, " ", year, "/", sprintf("%02d", month))
+  }
+  if (nRetrieved < 0.9 * nDays) {
+    warning("Fewer than 90% of the days available for ", variable, " ", year, "/", sprintf("%02d", month),
+            " -- month NOT used (a partial month would bias the monthly value)")
+    return(invisible(NULL))
   }
 
   dailyStack <- terra::rast(dailyLayers)
@@ -92,8 +114,7 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
   gc(verbose = FALSE)
 
   monthly <- switch(fun,
-                     "min" = terra::app(dailyStack, min, na.rm = TRUE),
-                     "max" = terra::app(dailyStack, max, na.rm = TRUE),
+                     "mean" = terra::app(dailyStack, mean, na.rm = TRUE),
                      "sum" = terra::app(dailyStack, sum, na.rm = TRUE))
 
   names(monthly) <- sprintf("%s_%d_%02d", variable, year, month)
