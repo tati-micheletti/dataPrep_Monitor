@@ -75,19 +75,15 @@ getMonthlyFile <- function(variable, year, month, chelsaMonthlyDir,
   message("Daily aggregation: ", variable, " ", year, "/", sprintf("%02d", month))
 
   nDays <- daysInMonth(year, month)
-  dailyLayers <- lapply(seq_len(nDays), function(d) {
+  readDay <- function(d) {
     url <- dailyURL(dailyVar, year, month, d, chelsaBase)
-    r <- tryCatch(terra::rast(url), error = function(e) {
-      warning("Failed: ", sprintf("CHELSA_%s_%02d_%02d_%d_V.2.1.tif",
-                                   dailyVar, d, month, year))
-      NULL
-    })
-    if (is.null(r)) return(NULL)
-    r <- terra::crop(r, europeBbox)
-    # fill values (seen: 0 and 6553.4 in temperature, i.e. 65534 x 0.1) become NA instead of data
-    if (variable == "prec") terra::clamp(r, lower = 0, upper = 2000, values = FALSE)
-    else terra::clamp(r, lower = 150, upper = 350, values = FALSE)
-  })
+    r <- tryCatch(terra::rast(url), error = function(e) NULL)
+    if (is.null(r)) { warning("Failed: ", sprintf("CHELSA_%s_%02d_%02d_%d_V.2.1.tif", dailyVar, d, month, year)); return(NULL) }
+    readDailyCropped(url, europeBbox, variable)   # retries a failed read; fill values -> NA
+  }
+  dailyLayers <- lapply(seq_len(nDays), readDay)
+  # a read that failed PARTLY leaves a layer with far fewer valid cells: re-read it, or drop it (see readDailyCropped.R)
+  dailyLayers <- completeDailyLayers(dailyLayers, reread = readDay)
 
   dailyLayers <- dailyLayers[!sapply(dailyLayers, is.null)]
   nRetrieved <- length(dailyLayers)
