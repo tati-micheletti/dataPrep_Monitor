@@ -21,7 +21,8 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
                                         force = FALSE) {
 
   # definition of the index the cached files must have been made with (see computeHeterogeneityIndex(), DECISIONS.md 2026-10-20); change it when the definition changes
-  heterogeneityVersion <- "v2 2026-10-20: no rare-category threshold; 0 where no mapped class; NA only where every layer is NA"
+  heterogeneityVersion <- "v2 2026-10-20: no rare-category threshold; 0 where no mapped class; masked to Germany (NA outside the GADM outline)"
+  studyArea <- germanyOutlineLAEA(file.path(dirname(processedRoot), "raw", "gadm"))   # the German outline, built once
 
   scales <- c(
     lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
@@ -49,7 +50,7 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
       if (!force && !versionOk && file.exists(outFile)) message(key, " (landscape_heterogeneity) cached file is from an older definition of the index -- recomputing")
 
       message(key, " (landscape_heterogeneity) needs (re)computation")
-      heterogeneity <- computeHeterogeneityIndex(year = yr, scaleDir = scaleDir, scaleName = s$scaleName)
+      heterogeneity <- computeHeterogeneityIndex(year = yr, scaleDir = scaleDir, scaleName = s$scaleName, studyArea = studyArea)
       if (is.null(heterogeneity)) {
         message("  Skipped ", key, " -- required land use/land cover file missing")
         next

@@ -199,6 +199,13 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
     dfGroup <- dfGroup[!is.na(dfGroup$ref_val), ]
     message("Removed ", nBefore - nrow(dfGroup), " observations outside study area (this group)")
 
+    # The study area is Germany: records outside the outline (neighbouring countries, sea) are removed HERE, explicitly, before the covariates are extracted.
+    # Until 2026-10-20 this happened by accident: the NA of landscape_heterogeneity outside Germany made the "NA covariates" filter below drop them (DECISIONS.md).
+    germanyOutline <- germanyOutlineLAEA(file.path(dirname(processedRoot), "raw", "gadm"))
+    inGer <- insideGermany(dfGroup, germanyOutline)
+    message("Removed ", sum(!inGer), " observations outside Germany (national outline), ", sum(inGer), " kept (this group)")
+    dfGroup <- dfGroup[inGer, ]
+
     message("\nBuilding full PA matrix...")
     surveyedRoutes <- dfGroup |> dplyr::distinct(AREA_NATIONAL_CODE, year)
     message("Surveyed route x year combinations: ", nrow(surveyedRoutes))

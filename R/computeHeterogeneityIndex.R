@@ -19,7 +19,7 @@
 #' A cell in which NO mapped category is present (total = 0) has no diversity
 #' among the mapped classes and gets 0; a cell with no data at all (every
 #' layer NA, i.e. outside the covariate coverage) stays NA. The remaining
-#' proportions are renormalized to sum to 1, as before.
+#' proportions are renormalized to sum to 1, as before. Outside Germany the layer is NA (see `studyArea`).
 #'
 #' Land cover and land use share the same nominal resolution per scale but
 #' have a small grid-origin offset (different source datasets) -- land
@@ -34,9 +34,13 @@
 #' @param rareThreshold Numeric. Proportions below this are zeroed out
 #'   before renormalizing. Default 0 = no threshold (version 2; version 1
 #'   used 0.05 and produced NA where nothing was left).
+#' @param studyArea SpatVector, the German outline (`germanyOutlineLAEA()`). REQUIRED: cells outside it are set to NA (the layer must be NA outside the
+#'   study area, so that records and predictions outside Germany are excluded explicitly and not by accident; version 1 got this only because its NA also
+#'   covered everything outside Germany) and complete (no NA) inside.
 #' @return SpatRaster, one layer named `"landscape_heterogeneity"`, or
 #'   NULL if the required land use/land cover files are missing.
-computeHeterogeneityIndex <- function(year, scaleDir, scaleName, rareThreshold = 0) {
+computeHeterogeneityIndex <- function(year, scaleDir, scaleName, studyArea, rareThreshold = 0) {
+  if (missing(studyArea) || is.null(studyArea)) stop("computeHeterogeneityIndex(): studyArea (the German outline) is required.")
 
   corineYr <- corineYear(year)
   resSuffix <- basename(scaleDir)
@@ -74,6 +78,7 @@ computeHeterogeneityIndex <- function(year, scaleDir, scaleName, rareThreshold =
   }
 
   heterogeneity <- terra::app(combined, fun = simpsonFun)
+  heterogeneity <- terra::mask(heterogeneity, studyArea, touches = TRUE)      # NA outside Germany; inside Germany simpsonFun() never returns NA (except where no layer has data)
   names(heterogeneity) <- "landscape_heterogeneity"
   heterogeneity
 }
