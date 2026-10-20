@@ -20,6 +20,9 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
                                         habitatResolutions, landscapeResolutions,
                                         force = FALSE) {
 
+  # definition of the index the cached files must have been made with (see computeHeterogeneityIndex(), DECISIONS.md 2026-10-20); change it when the definition changes
+  heterogeneityVersion <- "v2 2026-10-20: no rare-category threshold; 0 where no mapped class; NA only where every layer is NA"
+
   scales <- c(
     lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
     lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r))
@@ -35,11 +38,15 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
                                              "_", basename(scaleDir), ".tif"))
       key <- paste0(yr, "_", s$scaleName, "_", s$res)
 
-      if (!force && isValidRasterFile(outFile)) {
+      # a cached file counts only if it was made with the CURRENT definition of the index (sidecar <file>.version); older files are recomputed
+      versionFile <- paste0(outFile, ".version")
+      versionOk <- file.exists(versionFile) && identical(readLines(versionFile, warn = FALSE)[1], heterogeneityVersion)
+      if (!force && versionOk && isValidRasterFile(outFile)) {
         message(key, " (landscape_heterogeneity) cache hit -- skipping")
         outFiles[[key]] <- outFile
         next
       }
+      if (!force && !versionOk && file.exists(outFile)) message(key, " (landscape_heterogeneity) cached file is from an older definition of the index -- recomputing")
 
       message(key, " (landscape_heterogeneity) needs (re)computation")
       heterogeneity <- computeHeterogeneityIndex(year = yr, scaleDir = scaleDir, scaleName = s$scaleName)
@@ -48,6 +55,7 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
         next
       }
       terra::writeRaster(heterogeneity, outFile, overwrite = TRUE)
+      writeLines(heterogeneityVersion, versionFile)
       message("  Saved ", key, ": ", outFile)
       outFiles[[key]] <- outFile
     }

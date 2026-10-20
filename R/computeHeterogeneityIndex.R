@@ -7,11 +7,19 @@
 #' scale being modeled rather than a separately-aggregated native-
 #' resolution value.
 #'
-#' Any category below 5% of a cell's total (matching the existing
-#' `changeThresh = 0.05` convention used elsewhere in the pipeline, since
-#' no single universal external threshold exists in the literature) is
-#' zeroed out and the remaining proportions renormalized before computing
-#' the index, so noisy rare categories don't drive the result.
+#' VERSION 2 (2026-10-20, see DECISIONS.md): there is NO rare-category
+#' threshold any more (`rareThreshold = 0`). Version 1 zeroed every category
+#' below 5% of a cell and returned NA when nothing was left; that left holes
+#' (NA covariate = NA prediction) in about 0.75% of German 200 m cells --
+#' bare rock, tidal flats, lagoons, heath, and cells whose classes are all
+#' below 5% -- in every map of a species that uses this layer. The Simpson
+#' index squares the proportions, so a rare category hardly contributes
+#' anyway (a 3% class adds 0.0009); dropping the threshold changed the values
+#' by 0.019 on average (0-1 scale; correlation 0.987 with version 1, 2025).
+#' A cell in which NO mapped category is present (total = 0) has no diversity
+#' among the mapped classes and gets 0; a cell with no data at all (every
+#' layer NA, i.e. outside the covariate coverage) stays NA. The remaining
+#' proportions are renormalized to sum to 1, as before.
 #'
 #' Land cover and land use share the same nominal resolution per scale but
 #' have a small grid-origin offset (different source datasets) -- land
@@ -24,10 +32,11 @@
 #'   this scale are expected there.
 #' @param scaleName Character. `"habitat"` or `"landscape"`.
 #' @param rareThreshold Numeric. Proportions below this are zeroed out
-#'   before renormalizing (default 0.05).
+#'   before renormalizing. Default 0 = no threshold (version 2; version 1
+#'   used 0.05 and produced NA where nothing was left).
 #' @return SpatRaster, one layer named `"landscape_heterogeneity"`, or
 #'   NULL if the required land use/land cover files are missing.
-computeHeterogeneityIndex <- function(year, scaleDir, scaleName, rareThreshold = 0.05) {
+computeHeterogeneityIndex <- function(year, scaleDir, scaleName, rareThreshold = 0) {
 
   corineYr <- corineYear(year)
   resSuffix <- basename(scaleDir)
@@ -55,11 +64,13 @@ computeHeterogeneityIndex <- function(year, scaleDir, scaleName, rareThreshold =
   combined <- combineLayersSafely(allLayers)
 
   simpsonFun <- function(x) {
+    if (all(is.na(x))) return(NA_real_)          # no data at all (outside the covariate coverage): stays NA
+    x[is.na(x)] <- 0
     x[x < rareThreshold] <- 0
-    total <- sum(x, na.rm = TRUE)
-    if (total == 0 || is.na(total)) return(NA_real_)
+    total <- sum(x)
+    if (total == 0) return(0)                    # no mapped class in this cell: no diversity among the mapped classes
     p <- x / total
-    1 - sum(p^2, na.rm = TRUE)
+    1 - sum(p^2)
   }
 
   heterogeneity <- terra::app(combined, fun = simpsonFun)
