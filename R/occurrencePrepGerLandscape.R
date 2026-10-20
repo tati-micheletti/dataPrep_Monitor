@@ -161,8 +161,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
 
   message("Loading Probeflaechen shapefile...")
   probeflaechen <- sf::st_read(probeflaechenShpPath, quiet = TRUE)
-  probeflaechen <- sf::st_transform(probeflaechen, 3035)
-  coords <- sf::st_coordinates(sf::st_centroid(probeflaechen))
+  probeflaechen <- transformToLAEA(probeflaechen)
+  coords <- laeaCoordinates(sf::st_centroid(probeflaechen), "Probeflaechen centroids (landscape)")
   probeflaechen$x <- coords[, 1]
   probeflaechen$y <- coords[, 2]
 
@@ -367,7 +367,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       result <- reproducible::Cache(
         buildLandscapeSpeciesYear, spLatin = spLatin, yr = yr, spYr = spYr,
         covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
-        cachePath = cachePath,
+        cachePath = cachePath, .cacheExtra = list(schema = occurrenceCacheSchema),
         userTags = c("occurrencePrepGerLandscape", spClean, as.character(yr)))
 
       if (isCachedNull(result)) next
@@ -427,6 +427,7 @@ buildLandscapeSpeciesYear <- function(spLatin, yr, spYr, covStack, useThinning, 
 
   if (nBefore > nAfter) {
     message("  Removed ", nBefore - nAfter, " rows with NA covariates")
+    reportDroppedRows(nBefore, nAfter, envVals, coordsMat, paste(spLatin, yr, "(landscape)"))
   }
 
   if (sum(spYrEnv$occurrence == 1) < 10) {

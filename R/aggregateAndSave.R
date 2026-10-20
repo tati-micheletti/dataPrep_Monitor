@@ -29,7 +29,7 @@ aggregateAndSave <- function(rast30m, scaleName, layerName, outputDir,
 
   fact <- round(targetResM / 30)
   rAgg <- terra::aggregate(rast30m, fact = fact, fun = "mean", na.rm = TRUE)
-  rProj <- terra::project(rAgg, targetCRS, res = targetResM, method = "bilinear")
+  rProj <- regridToResolution(rAgg, targetResM, targetCRS, method = "bilinear")
   names(rProj) <- layerName
   terra::writeRaster(rProj, outFile, overwrite = TRUE)
   message("  Saved: ", outFile)

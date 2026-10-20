@@ -13,6 +13,11 @@
 downloadDEM <- function(demRawDir, bboxVec, pythonScriptPath, requirementsPath,
                          envName = "dataPrep_Monitor_env") {
 
+  if (downloadsDisabled()) {
+    message("BIRDMONITOR_SKIP_DOWNLOAD=1 -- not downloading DEM tiles.")
+    return(invisible(demRawDir))
+  }
+
   ensurePythonEnv(envName, requirementsPath)
 
   dir.create(demRawDir, recursive = TRUE, showWarnings = FALSE)

@@ -161,6 +161,10 @@ defineModule(sim, list(
     defineParameter("rerunDerivedCovariates", "logical", FALSE, NA, NA,
                     "Should prepareDerivedCovariates (dist_to_woodland, landscape_",
                     "heterogeneity) be re-run even if sim$derivedCovariatePaths exists?"),
+    defineParameter("rastersOnly", "logical", FALSE, NA, NA,
+                    "If TRUE, build ONLY the predictor rasters (climate, DEM, landuse,",
+                    "landcover, derived covariates) and skip prepareOccurrenceData. Used",
+                    "to pre-build new-resolution layers on a local machine."),
     defineParameter("rerunOccurrenceData", "logical", FALSE, NA, NA,
                     "Should prepareOccurrenceData be re-run even if sim$occurrenceData exists?"),
     defineParameter("useSpatialThinning", "logical", TRUE, NA, NA,
@@ -252,6 +256,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
   switch(
     eventType,
     init = {
+      warmUpSfProj()   # sf must touch GDAL/PROJ before terra does (axis-order issue on EVE; see warmUpSfProj.R)
       if (identical(P(sim)$species, NA_character_)) {
         stop("dataPrep_Monitor's species parameter must be supplied explicitly ",
              "(e.g. sharedSpecies from sharedConfig.R) -- no default roster.")
@@ -261,10 +266,12 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLanduse")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLandcover")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDerivedCovariates")
-      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
+      if (!isTRUE(P(sim)$rastersOnly))
+        sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
     },
 
     prepareClimateData = {
+      reportAxisState("start of prepareClimateData")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$bioclimPaths) || P(sim)$rerunClimateData) {
         sim$bioclimPaths <- prepareClimateData(
@@ -281,6 +288,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareDEM = {
+      reportAxisState("start of prepareDEM")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$demPaths) || P(sim)$rerunDEM) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -301,6 +309,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareLanduse = {
+      reportAxisState("start of prepareLanduse")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landusePaths) || P(sim)$rerunLanduse) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -320,6 +329,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareLandcover = {
+      reportAxisState("start of prepareLandcover")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$landcoverPaths) || P(sim)$rerunLandcover) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -340,6 +350,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareDerivedCovariates = {
+      reportAxisState("start of prepareDerivedCovariates")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$derivedCovariatePaths) || P(sim)$rerunDerivedCovariates) {
         habitatResolutions <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
@@ -368,6 +379,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
     },
 
     prepareOccurrenceData = {
+      reportAxisState("start of prepareOccurrenceData")
       # ! ----- EDIT BELOW ----- ! #
       if (is.null(sim$occurrenceData) || P(sim)$rerunOccurrenceData) {
         windowStart <- P(sim)$ebba2TrainingYear - (P(sim)$climateWindowLength - 1)

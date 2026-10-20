@@ -13,7 +13,7 @@ makeCategoryProportionLayer <- function(categoricalMap, codes, targetRes, catNam
   binary <- terra::app(categoricalMap, function(x) as.integer(x %in% codes))
   fact <- round(targetRes / terra::res(categoricalMap)[1])
   prop <- terra::aggregate(binary, fact = fact, fun = "mean", na.rm = TRUE)
-  prop <- terra::project(prop, targetCRS, res = targetRes, method = "bilinear")
+  prop <- regridToResolution(prop, targetRes, targetCRS, method = "bilinear")
   names(prop) <- catName
   prop
 }

@@ -17,6 +17,11 @@
 downloadLanduse <- function(landuseRawDir, pythonScriptPath, requirementsPath,
                              envName = "dataPrep_Monitor_env") {
 
+  if (downloadsDisabled()) {
+    message("BIRDMONITOR_SKIP_DOWNLOAD=1 -- not downloading land use maps.")
+    return(invisible(landuseRawDir))
+  }
+
   ensurePythonEnv(envName, requirementsPath)
 
   dir.create(landuseRawDir, recursive = TRUE, showWarnings = FALSE)
