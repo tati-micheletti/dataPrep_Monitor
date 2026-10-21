@@ -1,7 +1,7 @@
-#' Compute the 3-category land cover proportion layers for one CORINE snapshot
+#' Compute the land cover proportion layers (categories of `landcoverCategoriesCorine()`) for one CORINE snapshot
 #'
 #' Input CORINE rasters are already EPSG:3035 at 100m; this reprojects
-#' only if needed and computes built_up/trees/water proportion layers at
+#' only if needed and computes the category proportion layers at
 #' every distinct habitat/landscape resolution actually needed (usually
 #' just one of each -- the shared default -- but more than one when a
 #' species has its own `resolution_m` override; see DECISIONS.md's
@@ -50,7 +50,10 @@ computeLandcover <- function(corineYear, landcoverRawDir, processedRoot,
   # Independent per-scale-entry cache check (Lisa Hildebrand's v2 pattern,
   # generalized beyond exactly 2 scales) -- an entry whose cached output is
   # already valid is skipped even when another entry needs recomputing.
-  need <- vapply(outFiles, function(f) force || !isValidRasterFile(f), logical(1))
+  # A cached file counts only if it has exactly the layers of the CURRENT category list (a file made with the 3 categories of version 1 is recomputed).
+  expectedLayers <- names(landcoverCategoriesCorine())
+  isCurrent <- function(f) isValidRasterFile(f) && identical(names(terra::rast(f)), expectedLayers)
+  need <- vapply(outFiles, function(f) force || !isCurrent(f), logical(1))
 
   if (!any(need)) {
     message("Cache hit -- skipping CORINE ", corineYear)

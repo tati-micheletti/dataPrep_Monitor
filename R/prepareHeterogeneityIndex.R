@@ -23,7 +23,7 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
 
   # definition of the index the cached files must have been made with (see computeHeterogeneityIndex(), DECISIONS.md 2026-10-20); change it when the definition changes
   workingArea <- studyAreaWorking(studyArea, recordsBufferM)                                  # the study area plus the buffer of the habitat/landscape scales
-  heterogeneityVersion <- paste0("v2 2026-10-20: no rare-category threshold; 0 where no mapped class; NA outside the study area: ", studyAreaFingerprint(studyArea, recordsBufferM))
+  heterogeneityVersion <- paste0("v2 2026-10-20: no rare-category threshold; 0 where no mapped class; without hedges; land cover categories: ", paste(names(landcoverCategoriesCorine()), collapse = ","), "; NA outside the study area: ", studyAreaFingerprint(studyArea, recordsBufferM))
 
   scales <- c(
     lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),

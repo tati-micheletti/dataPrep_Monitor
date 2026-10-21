@@ -322,6 +322,10 @@ buildHabitatCovStackOneYear <- function(yr, habitatOutputDir) {
   if (file.exists(heteroFile)) {
     extraLayers$landscape_heterogeneity <- terra::rast(heteroFile)
   }
+  unmappedFile <- file.path(habitatOutputDir, paste0("unmapped_other_", yr, "_habitat_", resSuffix, ".tif"))      # share of the cell no mapped class describes (computeUnmappedShare())
+  if (file.exists(unmappedFile)) {
+    extraLayers$unmapped_other <- terra::rast(unmappedFile)
+  }
 
   # combineLayersSafely() rather than a bare c() -- lc/elev/slope/solar/
   # dist are all resampled (derived, not read-straight-from-disk) rasters,
@@ -442,11 +446,12 @@ buildHabitatSpeciesYear <- function(sp, yr, spPres, surveyedThisYr, pf, refRaste
 
   paEnv <- cbind(paThinnedDf, envVals)
 
-  nonHedge <- names(covStack)[!grepl("^hedges", names(covStack))]
+  # No layer is exempt any more: the predictor layers are complete inside the study area (hedges are filled in the files, heterogeneity has no NA), so this removes nothing except records in
+  # the water of the coastal buffer (no elevation there). A large number here is a bug in a layer: fix the layer.
   nBefore <- nrow(paEnv)
-  paEnv <- paEnv[stats::complete.cases(paEnv[, nonHedge]), ]
+  paEnv <- paEnv[stats::complete.cases(paEnv[, names(covStack)]), ]
   if (nBefore > nrow(paEnv)) {
-    message("Removed ", nBefore - nrow(paEnv), " rows with NA covariates")
+    message("Removed ", nBefore - nrow(paEnv), " rows with NA covariates (expected: only records in the coastal water)")
     reportDroppedRows(nBefore, nrow(paEnv), envVals, coordsMat, paste(sp, yr, "(habitat)"))
   }
 

@@ -48,6 +48,8 @@ defineModule(sim, list(
     defineParameter("climatePredictBufferM", "numeric", 50000, NA, NA,
                     "Buffer (m) around the study area for the PREDICTION windows of the climate scale: one coarse cell, so that the resampling to the fine grids has neighbours at the border.",
                     "The climate TRAINING window (ebba2TrainingYear) is not cropped: the climate model is fitted on all of Europe."),
+    defineParameter("stopIfNAInStudyArea", "logical", TRUE, NA, NA,
+                    "TRUE: after the layers are cropped to the study area, STOP (listing layer and year) if any predictor layer has NA inside it. Predictors must be complete by construction."),
     defineParameter("targetCRS", "character", "EPSG:3035", NA, NA,
                     "Output CRS for all prepared rasters (ETRS89-LAEA)."),
     defineParameter("europeBbox", "numeric", c(72, -25, 34, 45), NA, NA,
@@ -280,6 +282,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLandcover")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDerivedCovariates")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "applyStudyArea")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "checkStudyAreaComplete")
       if (!isTRUE(P(sim)$rastersOnly))
         sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
     },
@@ -371,6 +374,9 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
         landscapeResolutions <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
         processedRoot <- file.path(inputPath(sim), "predictors", "processed")
 
+        # hedges: the years without hedge data are filled IN THE FILES (nearest preceding year with data), so every layer is complete
+        completeHedges(processedRoot, P(sim)$landuseYears, habitatResolutions, landscapeResolutions)
+
         distPaths <- prepareDistToWoodland(
           landcoverRawDir = file.path(inputPath(sim), "predictors", "raw", "landcover"),
           processedRoot = processedRoot,
@@ -387,8 +393,17 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           studyArea = sim$studyArea, recordsBufferM = P(sim)$recordsBufferM,
           force = P(sim)$rerunDerivedCovariates)
 
+        unmappedPaths <- prepareUnmappedShare(
+          processedRoot = processedRoot,
+          landuseYears = P(sim)$landuseYears,
+          habitatResolutions = habitatResolutions,
+          landscapeResolutions = landscapeResolutions,
+          studyArea = sim$studyArea, recordsBufferM = P(sim)$recordsBufferM,
+          force = P(sim)$rerunDerivedCovariates)
+
         sim$derivedCovariatePaths <- list(distToWoodland = distPaths,
-                                           landscapeHeterogeneity = heterogeneityPaths)
+                                           landscapeHeterogeneity = heterogeneityPaths,
+                                           unmappedShare = unmappedPaths)
       }
       # ! ----- STOP EDITING ----- ! #
     },
@@ -400,6 +415,15 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       applyStudyAreaToProcessed(processedRoot = file.path(inputPath(sim), "predictors", "processed"), area = sim$studyArea,
                                 recordsBufferM = P(sim)$recordsBufferM, climatePredictBufferM = P(sim)$climatePredictBufferM,
                                 climateScaleLabel = scaleLabel(P(sim)$climateResolutionM), ebba2TrainingYear = P(sim)$ebba2TrainingYear)
+      # ! ----- STOP EDITING ----- ! #
+    },
+
+    checkStudyAreaComplete = {
+      reportAxisState("start of checkStudyAreaComplete")
+      # ! ----- EDIT BELOW ----- ! #
+      checkNoNAInsideStudyArea(processedRoot = file.path(inputPath(sim), "predictors", "processed"), area = sim$studyArea,
+                               climateScaleLabel = scaleLabel(P(sim)$climateResolutionM), ebba2TrainingYear = P(sim)$ebba2TrainingYear,
+                               stopIfNA = P(sim)$stopIfNAInStudyArea)
       # ! ----- STOP EDITING ----- ! #
     },
 

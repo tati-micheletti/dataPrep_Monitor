@@ -7,6 +7,8 @@
 #' scale being modeled rather than a separately-aggregated native-
 #' resolution value.
 #'
+#' `hedges` is NOT one of the classes (it is no share of the area and only exists for some years, so including it made the index change its definition in 2017, 2022 and 2024).
+#'
 #' VERSION 2 (2026-10-20, see DECISIONS.md): there is NO rare-category
 #' threshold any more (`rareThreshold = 0`). Version 1 zeroed every category
 #' below 5% of a cell and returned NA when nothing was left; that left holes
@@ -57,6 +59,7 @@ computeHeterogeneityIndex <- function(year, scaleDir, scaleName, studyArea, rare
   }
 
   lu <- terra::rast(luFile)
+  lu <- lu[[setdiff(names(lu), "hedges")]]        # hedges is not a share of the cell's area and exists only for some years: counting it would make the index jump in those years (2017, 2022, 2024)
   lc <- terra::rast(lcFile)
 
   # Resolve the same ~grid-origin offset loadCovariates.R already documents
