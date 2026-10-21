@@ -72,7 +72,8 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       sharedResolutionM, localeCtype = "de_DE.UTF-8",
                                       thinDist = 400, perSpeciesThinDist = NULL,
                                       useThinning = TRUE, brutzeitcodeFilter = NULL,
-                                      studyArea = NULL, recordsBufferM = 1000, cachePath = NULL) {
+                                      studyArea = NULL, recordsBufferM = 1000, speciesPredictors = NULL,
+                                      cachePath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -246,11 +247,15 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
           thinDist
         }
 
+        # Species-level cache key: the function gets ONLY the layers this species uses (speciesConfig_predictors.csv) and the key holds the content of exactly those layers
+        # (omitArgs + layerContentDigest), so a change in a layer the species does not use (e.g. hedges, heterogeneity) does not re-run it (DECISIONS.md 2026-10-21).
+        covSp <- speciesCovStack(covStack, speciesPredictors[[sp]], sp, "habitat")
         result <- reproducible::Cache(
           buildHabitatSpeciesYear, sp = sp, yr = yr, spPres = spPres,
           surveyedThisYr = surveyedThisYr, pf = pf, refRaster = refRaster,
-          covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
-          cachePath = cachePath, .cacheExtra = list(schema = occurrenceCacheSchema),
+          covStack = covSp, useThinning = useThinning, thinDist = spThinDist,
+          omitArgs = "covStack", cachePath = cachePath,
+          .cacheExtra = list(schema = occurrenceCacheSchema, covLayers = layerContentDigest(covSp, names(covSp))),
           userTags = c("occurrencePrepGerHabitat", spClean, as.character(yr)))
 
         if (isCachedNull(result)) next

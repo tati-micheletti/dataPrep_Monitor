@@ -43,6 +43,9 @@ defineModule(sim, list(
     defineParameter("studyAreaSpec", "list", NULL, NA, NA,
                     "THE study area of the pipeline (see R/studyArea.R, tools/sharedConfig.R: sharedStudyArea): list(label, countries (ISO3), regions (GADM level 1 names) or NULL, shapefile or NULL).",
                     "Predictor layers are cropped and masked to it (plus a buffer) after they are made and response records are filtered by it. No default (errors if unset)."),
+    defineParameter("speciesPredictorTable", "list", NULL, NA, NA,
+                    "Nested list species -> scale (climate/landscape/habitat) -> predictor names (speciesConfig_predictors.csv, as passed to inputs_Monitor). Used for SPECIES-LEVEL cache keys of the occurrence tables:",
+                    "each species is extracted from, and cached on, only the layers it uses. NULL = every layer."),
     defineParameter("recordsBufferM", "numeric", 1000, NA, NA,
                     "Buffer (m) around the study area for the habitat and landscape scales: layers are cropped to the area plus this buffer and records inside it are kept (coastal routes have centroids in the water)."),
     defineParameter("climatePredictBufferM", "numeric", 50000, NA, NA,
@@ -466,6 +469,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           perSpeciesDataSource = P(sim)$perSpeciesDataSource,
           germanNames = P(sim)$germanNames,
           studyArea = sim$studyArea, recordsBufferM = P(sim)$recordsBufferM,
+          speciesPredictorTable = P(sim)$speciesPredictorTable,
           cachePath = cachePath(sim))
       }
       # ! ----- STOP EDITING ----- ! #

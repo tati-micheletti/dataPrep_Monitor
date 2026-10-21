@@ -124,7 +124,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
                                         brutzeitcodeFilter = NULL, studyArea = NULL, recordsBufferM = 1000,
-                                        cachePath = NULL) {
+                                        speciesPredictors = NULL, cachePath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -373,10 +373,13 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       spYr <- occSpatial |>
         dplyr::filter(latin_name == spLatin, Jahr == as.character(yr))
 
+      # Species-level cache key (see occurrencePrepGerHabitat()): only this species' own layers, key = their content
+      covSp <- speciesCovStack(covStack, speciesPredictors[[spLatin]], spLatin, "landscape")
       result <- reproducible::Cache(
         buildLandscapeSpeciesYear, spLatin = spLatin, yr = yr, spYr = spYr,
-        covStack = covStack, useThinning = useThinning, thinDist = spThinDist,
-        cachePath = cachePath, .cacheExtra = list(schema = occurrenceCacheSchema),
+        covStack = covSp, useThinning = useThinning, thinDist = spThinDist,
+        omitArgs = "covStack", cachePath = cachePath,
+        .cacheExtra = list(schema = occurrenceCacheSchema, covLayers = layerContentDigest(covSp, names(covSp))),
         userTags = c("occurrencePrepGerLandscape", spClean, as.character(yr)))
 
       if (isCachedNull(result)) next
