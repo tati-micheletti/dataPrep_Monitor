@@ -73,7 +73,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       thinDist = 400, perSpeciesThinDist = NULL,
                                       useThinning = TRUE, brutzeitcodeFilter = NULL,
                                       studyArea = NULL, recordsBufferM = 1000, speciesPredictors = NULL,
-                                      cachePath = NULL) {
+                                      speciesNameAliases = NULL, cachePath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -91,6 +91,13 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   # this file is UTF-8 -- see the matching note in sharedSpeciesCanonical.R's
   # loadSpeciesCanonical() for why leaving this to locale guessing is unsafe.
   mhbRaw <- read.csv(mhbObsPath, header = TRUE, fileEncoding = "UTF-8")
+  # Names in the point-count file that are a subspecies or a variant of a roster species (e.g. "Motacilla flava flava", "Motacilla flava thunbergi" for the roster's "Motacilla flava") are
+  # counted as that species: a named vector, name in the file -> roster name (tools/sharedConfig.R: sharedDbirdNameAliases). Without it those records would silently be missing.
+  if (length(speciesNameAliases)) {
+    hit <- mhbRaw$SPECIES_NAME_SCIENTIFIC %in% names(speciesNameAliases)
+    message("Name aliases: ", sum(hit), " records renamed (", paste(unique(mhbRaw$SPECIES_NAME_SCIENTIFIC[hit]), collapse = ", "), ")")
+    mhbRaw$SPECIES_NAME_SCIENTIFIC[hit] <- unname(speciesNameAliases[mhbRaw$SPECIES_NAME_SCIENTIFIC[hit]])
+  }
 
   mhbRaw <- mhbRaw |>
     dplyr::mutate(date = as.Date(DATE_TIME, "%Y-%m-%d"),

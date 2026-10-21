@@ -46,6 +46,9 @@ defineModule(sim, list(
     defineParameter("speciesPredictorTable", "list", NULL, NA, NA,
                     "Nested list species -> scale (climate/landscape/habitat) -> predictor names (speciesConfig_predictors.csv, as passed to inputs_Monitor). Used for SPECIES-LEVEL cache keys of the occurrence tables:",
                     "each species is extracted from, and cached on, only the layers it uses. NULL = every layer."),
+    defineParameter("speciesNameAliases", "character", NULL, NA, NA,
+                    "Named character vector: name in the point-count file -> roster (Latin) name, for subspecies and variants that count as the roster species",
+                    "(tools/sharedConfig.R: sharedDbirdNameAliases; e.g. Motacilla flava flava -> Motacilla flava)."),
     defineParameter("recordsBufferM", "numeric", 1000, NA, NA,
                     "Buffer (m) around the study area for the habitat and landscape scales: layers are cropped to the area plus this buffer and records inside it are kept (coastal routes have centroids in the water)."),
     defineParameter("climatePredictBufferM", "numeric", 50000, NA, NA,
@@ -470,6 +473,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           germanNames = P(sim)$germanNames,
           studyArea = sim$studyArea, recordsBufferM = P(sim)$recordsBufferM,
           speciesPredictorTable = P(sim)$speciesPredictorTable,
+          speciesNameAliases = P(sim)$speciesNameAliases,
           cachePath = cachePath(sim))
       }
       # ! ----- STOP EDITING ----- ! #

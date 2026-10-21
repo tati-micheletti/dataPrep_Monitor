@@ -82,7 +82,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL,
                                    perSpeciesDataSource = NULL, germanNames,
                                    studyArea = NULL, recordsBufferM = 1000, speciesPredictorTable = NULL,
-                                   cachePath = NULL) {
+                                   speciesNameAliases = NULL, cachePath = NULL) {
 
   extractScale <- function(nested, scale) {
     if (is.null(nested)) return(NULL)
@@ -117,6 +117,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "habitat"),
     studyArea = studyArea, recordsBufferM = recordsBufferM,
     speciesPredictors = extractScale(speciesPredictorTable, "habitat"),
+    speciesNameAliases = speciesNameAliases,
     cachePath = cachePath)
 
   gerLandscapeFiles <- occurrencePrepGerLandscape(
