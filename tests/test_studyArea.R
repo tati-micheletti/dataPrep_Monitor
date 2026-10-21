@@ -32,6 +32,9 @@ check("land use keeps its 14 layer names", identical(names(lu), names(rast(file.
 check("climate prediction window cropped (fewer cells than the training window), training window unchanged", ncell(rast(file.path(tmp, "scale_50/bioclim_2014-2019_scale_50.tif"))) < ncell(rast(file.path(tmp, "scale_50/bioclim_2012-2017_scale_50.tif"))))
 r2 <- applyStudyAreaToProcessed(tmp, sax, 1000, 50000, "scale_50", 2017)
 check("second pass changes nothing (stamps)", !any(r2$action == "cropped and masked"))
-r3 <- applyStudyAreaToProcessed(tmp, deu, 1000, 50000, "scale_50", 2017, dryRun = TRUE)
-check("another study area (Germany) is detected as different", sum(r3$action == "would crop and mask") == 3)
+err <- tryCatch({ applyStudyAreaToProcessed(tmp, deu, 1000, 50000, "scale_50", 2017, dryRun = TRUE); "" }, error = function(e) conditionMessage(e))
+check("layers cropped for Saxony cannot be reused for Germany (stops, tells to re-make them)", grepl("SMALLER area", err))
+sax2 <- sax; sax2$label <- "Saxony, other label"
+r3 <- applyStudyAreaToProcessed(tmp, sax2, 1000, 50000, "scale_50", 2017, dryRun = TRUE)
+check("a different stamp for the SAME area is re-cropped (allowed: nothing is lost)", sum(r3$action == "would crop and mask") == 3)
 message("\n", ok, " passed, ", fail, " failed"); unlink(tmp, recursive = TRUE); if (fail) quit(status = 1)

@@ -3,7 +3,7 @@
 #'
 #' For species using the default data source: loads DDA territory and
 #' visited-route data, builds the full presence/absence matrix
-#' (Reviere > 0 -> presence). For species in `perSpeciesDataSource` marked
+#' (Reviere > 0 or Reviere == -1 -> presence; -1 = seen, not counted). For species in `perSpeciesDataSource` marked
 #' `"MhB point counts"` instead (e.g. Buteo buteo/Sturnus vulgaris -- see
 #' DECISIONS.md's "Buteo/Sturnus landscape data source" entry for why):
 #' builds presence/absence from the same raw MhB point-count CSV
@@ -208,8 +208,11 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       dplyr::left_join(territories |>
                           dplyr::select(ROUTENCODE, Jahr, species, Reviere),
                         by = c("ROUTENCODE", "Jahr", "species")) |>
+      # Reviere = -1: the observer saw the species on the plot but could not give a territory count (DDA/MhB documentation) -- a PRESENCE without a count
+      # (improvements.md item 23, 2026-10-21; 67 route-years of the 11 original species). Reviere = 0 is set by hand for a bird outside the plot: no presence.
       dplyr::mutate(Reviere = tidyr::replace_na(Reviere, 0),
-                     occurrence = as.integer(Reviere > 0)) |>
+                     occurrence = as.integer(Reviere > 0 | Reviere == -1),
+                     Reviere = ifelse(Reviere == -1, NA, Reviere)) |>             # no count exists: NA, so that nothing uses -1 as a number of territories
       dplyr::left_join(lookup, by = c("species" = "german")) |>
       dplyr::rename(latin_name = latin, german_name = species)
 

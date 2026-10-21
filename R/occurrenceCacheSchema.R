@@ -7,7 +7,8 @@
 #' as `.cacheExtra` in occurrencePrepEurope/GerHabitat/GerLandscape.
 #'
 #' History: 1 = original; 2 = 2026-10-05, after the EVE move (new covariates, per-species years);
-#' 3 = 2026-10-05, x/y axis-swap fix (transformToLAEA()) -- tables built before this are wrong on EVE.
+#' 3 = 2026-10-05, x/y axis-swap fix (transformToLAEA()) -- tables built before this are wrong on EVE;
+#' 4 = 2026-10-21, DDA Reviere = -1 counts as a presence (landscape), study-area record filter with buffer, species-level covariate keys, no hedges exemption.
 #'
 #' @format Integer scalar.
-occurrenceCacheSchema <- 3L
+occurrenceCacheSchema <- 4L
