@@ -3,7 +3,7 @@
 #' `hedges` (Thuenen hedge data) exists only for some years (2017-2021, 2024-2025 at the time of writing); in the other land-use files the layer is entirely NA. The covariate loaders used to
 #' fill it on the fly, and the occurrence step exempted `hedges` from its "no NA" rule. A predictor layer must be complete by construction (DECISIONS.md 2026-10-21), so the gap is filled
 #' once, here, in the processed land-use files: a year without data takes the hedge layer of the nearest PRECEDING year with data (no future information for past years); years before the first
-#' year with data take the first one. Which years have data is read from the files (a layer with at least one non-NA cell), nothing is hard-coded. A file that already has hedge data is not touched.
+#' year with data take the first one. Which years have data is read from the files (a layer with at least one non-NA cell), nothing is hard-coded. ALL land-use files of the scale are completed, also those of years that are not requested in this run (they would otherwise fail the completeness check). A file that already has hedge data is not touched.
 #' The filled layer is resampled (bilinear) onto the grid of the file, as the loaders did. The sidecar `.studyarea` of a changed file is removed so that it is cropped and masked again.
 #'
 #' @param processedRoot Character. `predictors/processed`.
@@ -17,7 +17,9 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
   for (s in scales) {
     d <- file.path(processedRoot, scaleLabel(s$res))
     f <- function(y) file.path(d, paste0("landuse_", y, "_", s$scaleName, "_", basename(d), ".tif"))
-    years <- landuseYears[file.exists(vapply(landuseYears, f, character(1)))]
+    onDisk <- as.integer(sub(paste0("^landuse_([0-9]{4})_", s$scaleName, "_", basename(d), "[.]tif$"), "\\1",
+                             list.files(d, pattern = paste0("^landuse_[0-9]{4}_", s$scaleName, "_", basename(d), "[.]tif$"))))       # EVERY land-use file of the scale, not only the requested years: a file left from an earlier run
+    years <- sort(unique(c(landuseYears, onDisk))); years <- years[file.exists(vapply(years, f, character(1)))]      # must be complete too (the check after the preparation looks at all files)
     hasData <- vapply(years, function(y) { r <- terra::rast(f(y)); "hedges" %in% names(r) && isTRUE(terra::global(r[["hedges"]], function(x) any(!is.na(x)))[1, 1] > 0) }, logical(1))
     real <- years[hasData]
     if (!length(real)) stop("completeHedges(): no year has hedge data at ", basename(d), "; nothing to fill from.")
