@@ -199,8 +199,9 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
     dfGroup <- dfGroup[!is.na(dfGroup$ref_val), ]
     message("Removed ", nBefore - nrow(dfGroup), " observations outside study area (this group)")
 
-    # The study area is Germany: records outside the outline (neighbouring countries, sea) are removed HERE, explicitly, before the covariates are extracted.
-    # Until 2026-10-20 this happened by accident: the NA of landscape_heterogeneity outside Germany made the "NA covariates" filter below drop them (DECISIONS.md).
+    # The study area is Germany: records outside the outline are removed HERE, explicitly, before the covariates are extracted. Measured 2026-10-20 on the raw point counts:
+    # only 34 of 217,941 presences (2022-2025) lie outside the outline, all coastal or offshore; the records the "NA covariates" filter used to drop are INSIDE Germany (DECISIONS.md).
+    # NOTE: a strict outline also drops coastal routes whose centroid lies in the water (2 of 2,637 MhB route centroids): a future study-area engine needs a buffer for records.
     germanyOutline <- germanyOutlineLAEA(file.path(dirname(processedRoot), "raw", "gadm"))
     inGer <- insideGermany(dfGroup, germanyOutline)
     message("Removed ", sum(!inGer), " observations outside Germany (national outline), ", sum(inGer), " kept (this group)")
