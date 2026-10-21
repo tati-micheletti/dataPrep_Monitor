@@ -40,6 +40,14 @@ defineModule(sim, list(
                     "Should caching of events or module be used?"),
 
     ## Spatial / temporal -------------------------------------------------------
+    defineParameter("studyAreaSpec", "list", NULL, NA, NA,
+                    "THE study area of the pipeline (see R/studyArea.R, tools/sharedConfig.R: sharedStudyArea): list(label, countries (ISO3), regions (GADM level 1 names) or NULL, shapefile or NULL).",
+                    "Predictor layers are cropped and masked to it (plus a buffer) after they are made and response records are filtered by it. No default (errors if unset)."),
+    defineParameter("recordsBufferM", "numeric", 1000, NA, NA,
+                    "Buffer (m) around the study area for the habitat and landscape scales: layers are cropped to the area plus this buffer and records inside it are kept (coastal routes have centroids in the water)."),
+    defineParameter("climatePredictBufferM", "numeric", 50000, NA, NA,
+                    "Buffer (m) around the study area for the PREDICTION windows of the climate scale: one coarse cell, so that the resampling to the fine grids has neighbours at the border.",
+                    "The climate TRAINING window (ebba2TrainingYear) is not cropped: the climate model is fitted on all of Europe."),
     defineParameter("targetCRS", "character", "EPSG:3035", NA, NA,
                     "Output CRS for all prepared rasters (ETRS89-LAEA)."),
     defineParameter("europeBbox", "numeric", c(72, -25, 34, 45), NA, NA,
@@ -223,6 +231,8 @@ defineModule(sim, list(
     #expectsInput("objectName", "objectClass", "input object description", sourceURL, ...),
   ),
   outputObjects = bindrows(
+    createsOutput("studyArea", "SpatVector",
+                  "The study area (R/buildStudyArea()): one polygon in EPSG:3035, built from the studyAreaSpec parameter."),
     createsOutput("bioclimPaths", "list",
                   "Named list of bioclim raster paths, one per climate target year."),
     createsOutput("demPaths", "list",
@@ -261,11 +271,15 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
         stop("dataPrep_Monitor's species parameter must be supplied explicitly ",
              "(e.g. sharedSpecies from sharedConfig.R) -- no default roster.")
       }
+      if (is.null(P(sim)$studyAreaSpec)) stop("dataPrep_Monitor's studyAreaSpec parameter must be supplied explicitly (sharedStudyArea from sharedConfig.R) -- no default study area.")
+      sim$studyArea <- buildStudyArea(P(sim)$studyAreaSpec, file.path(inputPath(sim), "predictors", "raw", "gadm"), P(sim)$targetCRS)
+      message("dataPrep_Monitor: study area '", sim$studyArea$label[1], "' (", paste(round(as.vector(terra::ext(sim$studyArea)) / 1000), collapse = " "), " km extent); buffers: records ", P(sim)$recordsBufferM, " m, climate prediction ", P(sim)$climatePredictBufferM, " m")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareClimateData")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDEM")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLanduse")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareLandcover")
       sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareDerivedCovariates")
+      sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "applyStudyArea")
       if (!isTRUE(P(sim)$rastersOnly))
         sim <- scheduleEvent(sim, time(sim), "dataPrep_Monitor", "prepareOccurrenceData")
     },
@@ -370,11 +384,22 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           landuseYears = P(sim)$landuseYears,
           habitatResolutions = habitatResolutions,
           landscapeResolutions = landscapeResolutions,
+          studyArea = sim$studyArea, recordsBufferM = P(sim)$recordsBufferM,
           force = P(sim)$rerunDerivedCovariates)
 
         sim$derivedCovariatePaths <- list(distToWoodland = distPaths,
                                            landscapeHeterogeneity = heterogeneityPaths)
       }
+      # ! ----- STOP EDITING ----- ! #
+    },
+
+    applyStudyArea = {
+      reportAxisState("start of applyStudyArea")
+      # ! ----- EDIT BELOW ----- ! #
+      # every processed predictor layer is cropped and masked to the study area (plus its buffer) BEFORE anything is extracted from it; layers already done for this area are skipped
+      applyStudyAreaToProcessed(processedRoot = file.path(inputPath(sim), "predictors", "processed"), area = sim$studyArea,
+                                recordsBufferM = P(sim)$recordsBufferM, climatePredictBufferM = P(sim)$climatePredictBufferM,
+                                climateScaleLabel = scaleLabel(P(sim)$climateResolutionM), ebba2TrainingYear = P(sim)$ebba2TrainingYear)
       # ! ----- STOP EDITING ----- ! #
     },
 
@@ -416,6 +441,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           brutzeitcodeFilter = P(sim)$brutzeitcodeFilter,
           perSpeciesDataSource = P(sim)$perSpeciesDataSource,
           germanNames = P(sim)$germanNames,
+          studyArea = sim$studyArea, recordsBufferM = P(sim)$recordsBufferM,
           cachePath = cachePath(sim))
       }
       # ! ----- STOP EDITING ----- ! #

@@ -72,7 +72,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       sharedResolutionM, localeCtype = "de_DE.UTF-8",
                                       thinDist = 400, perSpeciesThinDist = NULL,
                                       useThinning = TRUE, brutzeitcodeFilter = NULL,
-                                      cachePath = NULL) {
+                                      studyArea = NULL, recordsBufferM = 1000, cachePath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -199,13 +199,14 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
     dfGroup <- dfGroup[!is.na(dfGroup$ref_val), ]
     message("Removed ", nBefore - nrow(dfGroup), " observations outside study area (this group)")
 
-    # The study area is Germany: records outside the outline are removed HERE, explicitly, before the covariates are extracted. Measured 2026-10-20 on the raw point counts:
-    # only 34 of 217,941 presences (2022-2025) lie outside the outline, all coastal or offshore; the records the "NA covariates" filter used to drop are INSIDE Germany (DECISIONS.md).
-    # NOTE: a strict outline also drops coastal routes whose centroid lies in the water (2 of 2,637 MhB route centroids): a future study-area engine needs a buffer for records.
-    germanyOutline <- germanyOutlineLAEA(file.path(dirname(processedRoot), "raw", "gadm"))
-    inGer <- insideGermany(dfGroup, germanyOutline)
-    message("Removed ", sum(!inGer), " observations outside Germany (national outline), ", sum(inGer), " kept (this group)")
-    dfGroup <- dfGroup[inGer, ]
+    # Records outside the study area (plus the record buffer) are removed HERE, explicitly, before the covariates are extracted. Measured 2026-10-20 on the raw point counts:
+    # only 34 of 217,941 presences (2022-2025) lie outside the German outline, all coastal or offshore; the records the "NA covariates" filter used to drop are INSIDE Germany (DECISIONS.md).
+    # The buffer keeps coastal records whose centroid lies in the water (2 of 2,637 MhB route centroids lie outside the German outline).
+    if (!is.null(studyArea)) {
+      inArea <- insideStudyArea(dfGroup, studyArea, recordsBufferM)
+      message("Removed ", sum(!inArea), " observations outside the study area '", studyArea$label[1], "' (+", recordsBufferM, " m), ", sum(inArea), " kept (this group)")
+      dfGroup <- dfGroup[inArea, ]
+    }
 
     message("\nBuilding full PA matrix...")
     surveyedRoutes <- dfGroup |> dplyr::distinct(AREA_NATIONAL_CODE, year)

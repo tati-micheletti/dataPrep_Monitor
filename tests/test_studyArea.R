@@ -1,0 +1,37 @@
+# Local test of the study-area engine (R/studyArea.R) on real layers, in a scratch copy (nothing in inputs/ is touched):
+#   Rscript modules/dataPrep_Monitor/tests/test_studyArea.R        (from the repo root; needs inputs/predictors/processed and internet for GADM level 1 once)
+suppressMessages(library(terra))
+for (f in c("laeaAnalytic.R", "studyArea.R")) source(file.path("modules/dataPrep_Monitor/R", f))
+ok <- 0L; fail <- 0L; check <- function(what, cond) { if (isTRUE(cond)) { ok <<- ok + 1L; message("ok   ", what) } else { fail <<- fail + 1L; message("FAIL ", what) } }
+gadm <- file.path("inputs", "predictors", "raw", "gadm")
+deu <- buildStudyArea(list(label = "Germany", countries = "DEU"), gadm)
+sax <- buildStudyArea(list(label = "Saxony", countries = "DEU", regions = "Sachsen"), gadm)
+eD <- as.vector(ext(deu)); eS <- as.vector(ext(sax))
+check("Germany: extent plausible", eD[1] > 4.0e6 && eD[2] < 4.7e6 && eD[3] > 2.6e6 && eD[4] < 3.6e6)
+check("Saxony is inside Germany's extent and much smaller", eS[1] >= eD[1] && eS[2] <= eD[2] && expanse(sax) < 0.1 * expanse(deu))
+check("Saxony area about 18,400 km2", abs(expanse(sax) / 1e6 - 18400) < 600)
+ll <- function(lon, lat) { z <- lonLatToLAEA(lon, lat); data.frame(x = z[, 1], y = z[, 2]) }
+p <- ll(c(13.74, 13.40, 11.58, 8.30), c(51.05, 52.52, 48.14, 54.9)); rownames(p) <- c("Dresden", "Berlin", "Munich", "Sylt")
+check("points: Dresden in Saxony and Germany; Berlin and Munich only in Germany", all(insideStudyArea(p, sax)[1] & !insideStudyArea(p, sax)[2:3]) && all(insideStudyArea(p, deu)[1:4]))
+# coastal routes whose centroid lies in the water: outside the outline, inside with the 1 km buffer?
+suppressMessages(library(sf)); source("modules/dataPrep_Monitor/R/transformToLAEA.R")
+pf <- st_read("inputs/response/raw/MhB/MhB_Probeflaechen_DE_S2637_epsg25832.shp", quiet = TRUE) |> transformToLAEA(); xy <- laeaCoordinates(st_centroid(pf), "centroids"); xy <- data.frame(x = xy[, 1], y = xy[, 2])
+n0 <- sum(!insideStudyArea(xy, deu, 0)); n1 <- sum(!insideStudyArea(xy, deu, 1000)); n5 <- sum(!insideStudyArea(xy, deu, 5000)); message("route centroids outside Germany: buffer 0 m: ", n0, " | 1 km: ", n1, " | 5 km: ", n5)
+check("the buffer keeps the coastal route centroids (fewer outside with 1 km than with 0)", n1 < n0 || n0 == 0)
+# crop and mask of real layers in a scratch copy
+tmp <- file.path(Sys.getenv("SPD", tempdir()), "sa_test"); unlink(tmp, recursive = TRUE); src <- file.path("inputs", "predictors", "processed")
+for (f in c("scale_02/landuse_2025_habitat_scale_02.tif", "scale_02/slope_habitat_scale_02.tif", "scale_50/bioclim_2012-2017_scale_50.tif", "scale_50/bioclim_2014-2019_scale_50.tif")) { dir.create(file.path(tmp, dirname(f)), recursive = TRUE, showWarnings = FALSE); file.copy(file.path(src, f), file.path(tmp, f)) }
+before <- sapply(c("scale_02/slope_habitat_scale_02.tif", "scale_02/landuse_2025_habitat_scale_02.tif"), function(f) ncell(rast(file.path(tmp, f))))
+r1 <- applyStudyAreaToProcessed(tmp, sax, recordsBufferM = 1000, climatePredictBufferM = 50000, climateScaleLabel = "scale_50", ebba2TrainingYear = 2017)
+check("first pass: 3 layers cropped, the training window left alone", sum(r1$action == "cropped and masked") == 3 && sum(grepl("training", r1$action)) == 1)
+slope <- rast(file.path(tmp, "scale_02/slope_habitat_scale_02.tif")); lu <- rast(file.path(tmp, "scale_02/landuse_2025_habitat_scale_02.tif"))
+check(sprintf("slope (Europe-wide, %s cells) cropped to the Saxony window (%s cells)", format(before[1], big.mark = ","), format(ncell(slope), big.mark = ",")), ncell(slope) < 0.01 * before[1])
+inS <- !is.na(rasterize(studyAreaWorking(sax, 1000), slope, field = 1, background = NA, touches = TRUE))
+check("slope: no NA inside the buffered area, all NA outside it", global(is.na(slope) & inS, "sum")[1, 1] == 0 && global(!is.na(slope) & !inS, "sum")[1, 1] == 0)
+check("land use keeps its 14 layer names", identical(names(lu), names(rast(file.path(src, "scale_02/landuse_2025_habitat_scale_02.tif")))))
+check("climate prediction window cropped (fewer cells than the training window), training window unchanged", ncell(rast(file.path(tmp, "scale_50/bioclim_2014-2019_scale_50.tif"))) < ncell(rast(file.path(tmp, "scale_50/bioclim_2012-2017_scale_50.tif"))))
+r2 <- applyStudyAreaToProcessed(tmp, sax, 1000, 50000, "scale_50", 2017)
+check("second pass changes nothing (stamps)", !any(r2$action == "cropped and masked"))
+r3 <- applyStudyAreaToProcessed(tmp, deu, 1000, 50000, "scale_50", 2017, dryRun = TRUE)
+check("another study area (Germany) is detected as different", sum(r3$action == "would crop and mask") == 3)
+message("\n", ok, " passed, ", fail, " failed"); unlink(tmp, recursive = TRUE); if (fail) quit(status = 1)

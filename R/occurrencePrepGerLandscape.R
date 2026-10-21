@@ -123,7 +123,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         thinDist = 2000, perSpeciesThinDist = NULL,
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
-                                        brutzeitcodeFilter = NULL, cachePath = NULL) {
+                                        brutzeitcodeFilter = NULL, studyArea = NULL, recordsBufferM = 1000,
+                                        cachePath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -297,6 +298,14 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
   }
 
   occSpatial <- dplyr::bind_rows(occSpatial, occSpatialMhB)
+
+  # Every response is filtered by the study area (plus the record buffer), also where it does not remove anything today (DDA routes lie in Germany): the pipeline must work
+  # unchanged for another area (a state, or Europe with other data than the DDA).
+  if (!is.null(studyArea)) {
+    inArea <- insideStudyArea(occSpatial, studyArea, recordsBufferM)
+    message("  Removed ", sum(!inArea), " PA records outside the study area '", studyArea$label[1], "' (+", recordsBufferM, " m), ", sum(inArea), " kept")
+    occSpatial <- occSpatial[inArea, ]
+  }
 
   message("  Total PA records: ", nrow(occSpatial))
 

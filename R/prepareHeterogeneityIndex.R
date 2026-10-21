@@ -18,11 +18,12 @@
 #'   `"<year>_<scaleName>_<resM>"`.
 prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
                                         habitatResolutions, landscapeResolutions,
-                                        force = FALSE) {
+                                        studyArea, recordsBufferM = 1000, force = FALSE) {
+  if (missing(studyArea) || is.null(studyArea)) stop("prepareHeterogeneityIndex(): studyArea (buildStudyArea()) is required.")
 
   # definition of the index the cached files must have been made with (see computeHeterogeneityIndex(), DECISIONS.md 2026-10-20); change it when the definition changes
-  heterogeneityVersion <- "v2 2026-10-20: no rare-category threshold; 0 where no mapped class; masked to Germany (NA outside the GADM outline)"
-  studyArea <- germanyOutlineLAEA(file.path(dirname(processedRoot), "raw", "gadm"))   # the German outline, built once
+  workingArea <- studyAreaWorking(studyArea, recordsBufferM)                                  # the study area plus the buffer of the habitat/landscape scales
+  heterogeneityVersion <- paste0("v2 2026-10-20: no rare-category threshold; 0 where no mapped class; NA outside the study area: ", studyAreaFingerprint(studyArea, recordsBufferM))
 
   scales <- c(
     lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)),
@@ -50,7 +51,7 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
       if (!force && !versionOk && file.exists(outFile)) message(key, " (landscape_heterogeneity) cached file is from an older definition of the index -- recomputing")
 
       message(key, " (landscape_heterogeneity) needs (re)computation")
-      heterogeneity <- computeHeterogeneityIndex(year = yr, scaleDir = scaleDir, scaleName = s$scaleName, studyArea = studyArea)
+      heterogeneity <- computeHeterogeneityIndex(year = yr, scaleDir = scaleDir, scaleName = s$scaleName, studyArea = workingArea)
       if (is.null(heterogeneity)) {
         message("  Skipped ", key, " -- required land use/land cover file missing")
         next
