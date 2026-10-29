@@ -52,11 +52,13 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
 checkNoNAInsideStudyArea <- function(processedRoot, area, climateScaleLabel = "scale_50", ebba2TrainingYear = 2017, stopIfNA = TRUE) {
   dirs <- list.dirs(processedRoot, recursive = FALSE, full.names = TRUE); dirs <- dirs[grepl("^scale_", basename(dirs))]
   bad <- list(); n <- 0L
+  terra::terraOptions(memmax = 8)                                                       # terra sizes its memory from the whole node, not from the Slurm limit: without a cap the masks of hundreds of files piled up and the job was killed (OOM, 29 Oct 2026)
   for (d in dirs) for (f in list.files(d, pattern = "[.]tif$", full.names = TRUE)) {
     if (basename(d) == climateScaleLabel && grepl(paste0("bioclim_[0-9]{4}-", ebba2TrainingYear, "_"), basename(f))) next
     r <- terra::rast(f); na <- terra::mask(is.na(r), area, touches = TRUE)             # 1 = NA inside the area, 0 = value inside, NA outside
     cnt <- terra::global(na, "sum", na.rm = TRUE)[, 1]; n <- n + 1L
     if (any(cnt > 0)) bad[[length(bad) + 1]] <- data.frame(file = file.path(basename(d), basename(f)), layer = names(r)[cnt > 0], naInsideStudyArea = cnt[cnt > 0])
+    rm(r, na); invisible(gc(verbose = FALSE))                                           # free the memory of this file before the next one
   }
   out <- if (length(bad)) do.call(rbind, bad) else data.frame(file = character(), layer = character(), naInsideStudyArea = numeric())
   message("checkNoNAInsideStudyArea: ", n, " layer files checked, ", nrow(out), " layer(s) with NA inside the study area '", area$label[1], "'")
