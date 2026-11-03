@@ -162,6 +162,7 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
     layers <- layers[allCatNames]
     terra::writeRaster(terra::rast(layers), outFiles[[nm]], overwrite = TRUE)
     writeLines(schemeTag, paste0(outFiles[[nm]], ".scheme.txt"))
+    sfx <- paste0(outFiles[[nm]], ".hedgesfixed"); if (file.exists(sfx)) file.remove(sfx)         # raw hedges again: completeHedges() must see this file as data, not as already fixed
     message("  Saved ", nm, ": ", outFiles[[nm]])
   }
 

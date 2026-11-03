@@ -111,6 +111,9 @@ defineModule(sim, list(
                     "TRUE: classes from HCTM wherever it exists (<= 2023), CTM only after that, recoded to HCTM",
                     "classes (hedges always from CTM). FALSE: the old rule (CTM first, no recode); cached files",
                     "made with the other rule are recomputed."),
+    defineParameter("hedgesMode", "character", "mean", NA, NA,
+                    "'mean': the hedges layer of every land-use file is ONE fixed layer, the mean of the years with hedge data",
+                    "(the year-to-year changes are map-version artefacts, DECISIONS.md 2026-11-03). 'nearest': the old rule (nearest preceding year)."),
     defineParameter("landuseRecodeFile", "character", file.path("data", "landuseRecodeCTMtoHCTM.csv"), NA, NA,
                     "CTM -> HCTM recode matrix (tools/buildLanduseRecode.R); read only for years that need it."),
     defineParameter("habitatYears", "list", NULL, NA, NA,
@@ -388,8 +391,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
         landscapeResolutions <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
         processedRoot <- file.path(inputPath(sim), "predictors", "processed")
 
-        # hedges: the years without hedge data are filled IN THE FILES (nearest preceding year with data), so every layer is complete
-        completeHedges(processedRoot, P(sim)$landuseYears, habitatResolutions, landscapeResolutions)
+        # hedges: ONE fixed layer (mean of the years with hedge data) written IN THE FILES of every year (hedgesMode = 'nearest': the years without data take the nearest preceding year), so every layer is complete
+        completeHedges(processedRoot, P(sim)$landuseYears, habitatResolutions, landscapeResolutions, mode = P(sim)$hedgesMode)
 
         distPaths <- prepareDistToWoodland(
           landcoverRawDir = file.path(inputPath(sim), "predictors", "raw", "landcover"),

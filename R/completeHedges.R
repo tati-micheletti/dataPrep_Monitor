@@ -1,5 +1,12 @@
-#' Fill the `hedges` layer of the years without hedge data IN THE FILES (not on the fly)
+#' Complete the `hedges` layer of every land-use file IN THE FILES (not on the fly): ONE FIXED layer (`mode = "mean"`, since 2026-11-03) or the nearest preceding year (`mode = "nearest"`, the old rule)
 #'
+#' `mode = "mean"`: the layer of EVERY land-use file becomes the mean of the hedge layers of the years that have hedge data (2017-2021, 2024-2025 at the time of writing). The year-to-year
+#' changes of the Thuenen hedge layer are not real hedge dynamics but differences between map versions (country mean 3.3% in 2017, 3.7-3.8% in 2018-2021, 2.8% in 2024, 3.6% in 2025; the spatial pattern of
+#' 2024/2025 correlates only 0.85-0.91 with 2018-2021, 2018-2021 with each other 0.96-0.97), so a yearly layer would put artefacts into the predictions (DECISIONS.md 2026-11-03). Every file gets a sidecar
+#' `<file>.hedgesfixed` naming the years the mean was made from: files that carry it are not read as data again, so a second call changes nothing; a file recomputed by `computeLanduse()` has its raw
+#' hedges again and the mean is made anew over the years that have raw data (recompute ALL years for a mean over all of them).
+#'
+#' `mode = "nearest"` (the rule before 2026-11-03):
 #' `hedges` (Thuenen hedge data) exists only for some years (2017-2021, 2024-2025 at the time of writing); in the other land-use files the layer is entirely NA. The covariate loaders used to
 #' fill it on the fly, and the occurrence step exempted `hedges` from its "no NA" rule. A predictor layer must be complete by construction (DECISIONS.md 2026-10-21), so the gap is filled
 #' once, here, in the processed land-use files: a year without data takes the hedge layer of the nearest PRECEDING year with data (no future information for past years); years before the first
@@ -11,7 +18,8 @@
 #' @param habitatResolutions,landscapeResolutions Numeric vectors (m).
 #' @param dryRun Logical. Only report.
 #' @return Invisibly, a data.frame (scale, year, action, from).
-completeHedges <- function(processedRoot, landuseYears, habitatResolutions, landscapeResolutions, dryRun = FALSE) {
+completeHedges <- function(processedRoot, landuseYears, habitatResolutions, landscapeResolutions, dryRun = FALSE, mode = c("mean", "nearest")) {
+  mode <- match.arg(mode)
   scales <- c(lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)), lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r)))
   rows <- list()
   for (s in scales) {
@@ -21,6 +29,33 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
                              list.files(d, pattern = paste0("^landuse_[0-9]{4}_", s$scaleName, "_", basename(d), "[.]tif$"))))       # EVERY land-use file of the scale, not only the requested years: a file left from an earlier run
     years <- sort(unique(c(landuseYears, onDisk))); years <- years[file.exists(vapply(years, f, character(1)))]      # must be complete too (the check after the preparation looks at all files)
     hasData <- vapply(years, function(y) { r <- terra::rast(f(y)); "hedges" %in% names(r) && isTRUE(terra::global(r[["hedges"]], function(x) any(!is.na(x)))[1, 1] > 0) }, logical(1))
+    if (mode == "mean") {
+      fixedOf <- function(y) { sf <- paste0(f(y), ".hedgesfixed"); if (file.exists(sf)) readLines(sf, warn = FALSE)[1] else "" }
+      isFixed <- vapply(years, function(y) nzchar(fixedOf(y)), logical(1)); realM <- years[hasData & !isFixed]
+      if (!length(realM)) {
+        if (all(isFixed)) { message("hedges ", basename(d), ": all files already carry the fixed layer, nothing to do"); next }
+        stop("completeHedges(): no year with raw hedge data at ", basename(d), " and not every file carries the fixed layer; recompute the land use (rerunLanduse).")
+      }
+      tag <- paste0("fixed mean of the hedge layers of ", paste(realM, collapse = ","))
+      todo <- years[vapply(years, fixedOf, character(1)) != tag]
+      if (dryRun) { for (y in todo) rows[[length(rows) + 1]] <- data.frame(scale = basename(d), year = y, action = "would fix", from = length(realM)); next }
+      if (!length(todo)) next
+      lay <- lapply(realM, function(y) terra::rast(f(y))[["hedges"]]); g <- lay[[1]]
+      lay <- lapply(lay, function(l) if (isTRUE(terra::compareGeom(l, g, stopOnError = FALSE))) l else terra::resample(l, g, method = "bilinear"))
+      meanH <- terra::mean(terra::rast(lay), na.rm = TRUE); names(meanH) <- "hedges"; rm(lay); invisible(gc())
+      for (y in todo) {
+        r <- terra::rast(f(y)); mh <- terra::resample(meanH, r[[1]], method = "bilinear"); names(mh) <- "hedges"
+        out <- terra::rast(lapply(names(r), function(n) if (n == "hedges") mh else r[[n]])); names(out) <- names(r)
+        part <- paste0(f(y), ".part")
+        terra::writeRaster(out, part, filetype = "GTiff", overwrite = TRUE, datatype = terra::datatype(r)[1], gdal = "COMPRESS=DEFLATE")
+        rm(r, out, mh); invisible(gc())
+        file.remove(f(y)); file.rename(part, f(y)); sf <- paste0(f(y), ".studyarea"); if (file.exists(sf)) file.remove(sf)
+        writeLines(tag, paste0(f(y), ".hedgesfixed"))
+        message("hedges ", basename(d), " ", y, ": fixed layer (mean of ", paste(realM, collapse = ","), ")")
+        rows[[length(rows) + 1]] <- data.frame(scale = basename(d), year = y, action = "fixed mean", from = length(realM))
+      }
+      next
+    }
     real <- years[hasData]
     if (!length(real)) stop("completeHedges(): no year has hedge data at ", basename(d), "; nothing to fill from.")
     for (y in years[!hasData]) {
