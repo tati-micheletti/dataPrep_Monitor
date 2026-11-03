@@ -1,12 +1,27 @@
 #' Compute the 14-category land use proportion layers for one year
 #'
-#' Detects which raw dataset (CTM or HCTM) covers `year`, reprojects it,
-#' and computes a proportion-of-category layer for each of the 14
-#' consistent output categories at every distinct habitat/landscape
-#' resolution actually needed (usually just one of each -- the shared
-#' default -- but more than one when a species has its own
-#' `resolution_m` override; see DECISIONS.md's 2026-09-28 entry). HCTM
-#' years get an all-NA hedges layer (not mapped in that dataset).
+#' Picks the raw crop type map(s) for `year`, reprojects them, and computes a
+#' proportion-of-category layer for each of the 14 consistent output
+#' categories at every distinct habitat/landscape resolution actually needed
+#' (usually just one of each -- the shared default -- but more than one when
+#' a species has its own `resolution_m` override; see DECISIONS.md's
+#' 2026-09-28 entry).
+#'
+#' Which map is used (`preferHCTM = TRUE`, the rule since 2026-11-03):
+#' the classes come from HCTM wherever it exists (1990-2023), so the time
+#' series is not a patchwork of two products that map the area differently
+#' (HCTM maps about 6 percentage points more grassland than CTM, 6 times more
+#' orchards and 1.8 times more fallow: the grassland share jumped in 2017, 2022
+#' and 2024). Where only CTM exists (2024-2025) its class shares are turned into
+#' the shares HCTM would have mapped, with `recodeFile` (see
+#' `tools/buildLanduseRecode.R`, `applyLanduseRecode()`). `hedges` exist only in
+#' CTM and come from the CTM map of the same year whenever one exists (2017-2021,
+#' 2024-2025), otherwise the layer is all NA (filled later by `completeHedges()`).
+#' `preferHCTM = FALSE` is the old rule (CTM first, no recode), kept to reproduce earlier runs.
+#'
+#' A cached output is reused only if it was made with the same rule: next to each
+#' output file a small `<file>.scheme.txt` records the source files and the recode
+#' used; files without it count as made by the old rule.
 #'
 #' @param year Integer.
 #' @param landuseRawDir Character. Directory containing raw crop type maps.
@@ -19,27 +34,34 @@
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
 #' @param force Logical. If TRUE, recompute and overwrite even if a valid
 #'   cached output already exists (e.g. a bug was found in the raw data).
+#' @param preferHCTM Logical. TRUE (default): HCTM first, CTM only where HCTM does not exist, recoded to HCTM classes. FALSE: the old rule.
+#' @param recodeFile Character. CTM -> HCTM recode matrix (`data/landuseRecodeCTMtoHCTM.csv`); only read for a year that needs it.
 #' @return Invisibly, a named list of output file paths, keyed
 #'   `"habitat_<resM>"`/`"landscape_<resM>"`, or NULL if no raw file was
 #'   found for `year`.
 computeLanduse <- function(year, landuseRawDir, processedRoot,
                             habitatResolutions, landscapeResolutions,
-                            targetCRS, force = FALSE) {
+                            targetCRS, force = FALSE,
+                            preferHCTM = TRUE, recodeFile = file.path("data", "landuseRecodeCTMtoHCTM.csv")) {
 
-  # Find raw file for this year -- check CTM datasets first (Schwieder/Tetteh v302)
+  # Raw files for this year: the CTM maps (Schwieder v202, Tetteh v302) and the HCTM map (Tetteh 2026)
   ctmPatterns <- c(file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v202_COG.tif", year)),
                     file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v302_COG.tif", year)),
                     # 2025 has a month suffix in the filename
                     file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v302_2025_08_COG.tif", year)))
   hctmPath <- file.path(landuseRawDir, sprintf("HCTM_GER_%d_rst_v101_COG.tif", year))
 
-  rawFile <- NA
+  ctmFile <- NA_character_
   for (p in ctmPatterns) {
-    if (file.exists(p)) { rawFile <- p; break }
+    if (file.exists(p)) { ctmFile <- p; break }
   }
-  if (is.na(rawFile) && file.exists(hctmPath)) {
-    rawFile <- hctmPath
-  }
+  hctmFile <- if (file.exists(hctmPath)) hctmPath else NA_character_
+
+  # classFile = the map the classes come from; hedgeFile = the map the hedges come from (only CTM has them)
+  classFile <- if (preferHCTM) { if (!is.na(hctmFile)) hctmFile else ctmFile } else { if (!is.na(ctmFile)) ctmFile else hctmFile }
+  hedgeFile <- ctmFile
+  rawFile <- classFile
+  recode <- preferHCTM && !is.na(classFile) && startsWith(basename(classFile), "CTM_GER")   # CTM classes used as HCTM classes: recode
 
   # One entry per distinct resolution actually needed, at each scale --
   # usually 2 total (one habitat, one landscape default), more when a
@@ -62,10 +84,20 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
     file.path(s$dir, paste0("landuse_", year, "_", s$scaleName, "_", basename(s$dir), ".tif"))
   })
 
+  # What this output is made from: the cache below is valid only for the same rule, same source files, same recode
+  schemeTag <- if (!preferHCTM) "legacy-ctm-first" else
+    paste0("hctm-first|classes=", if (is.na(classFile)) "NA" else basename(classFile), "|hedges=", if (is.na(hedgeFile)) "NA" else basename(hedgeFile),
+           if (recode && !is.null(recodeFile) && file.exists(recodeFile)) paste0("|recode=", unname(tools::md5sum(recodeFile))) else "")
+  schemeMatches <- function(f) {
+    sc <- paste0(f, ".scheme.txt")
+    if (!file.exists(sc)) return(startsWith(schemeTag, "legacy"))                            # files without a record were made by the old rule
+    identical(readLines(sc, warn = FALSE)[1], schemeTag)
+  }
+
   # Independent per-scale-entry cache check (Lisa Hildebrand's v2 pattern,
   # generalized beyond exactly 2 scales) -- an entry whose cached output is
   # already valid is skipped even when another entry needs recomputing.
-  need <- vapply(outFiles, function(f) force || !isValidRasterFile(f), logical(1))
+  need <- vapply(outFiles, function(f) force || !isValidRasterFile(f) || !schemeMatches(f), logical(1))
 
   if (!any(need)) {
     message("  Cache hit -- skipping year ", year)
@@ -81,54 +113,55 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
     return(invisible(NULL))
   }
 
-  message("  Source file: ", basename(rawFile))
+  message("  Source file: ", basename(rawFile),
+          if (recode) " (CTM classes recoded to HCTM classes)" else "",
+          if (!is.na(hedgeFile) && hedgeFile != rawFile) paste0("; hedges from ", basename(hedgeFile)) else "")
 
-  scheme <- getLanduseCategories(basename(rawFile))
-  categories <- scheme$cats
-  hasHedges <- scheme$has_hedges
+  ctmCats <- landuseCategoriesCTM()
+  classScheme <- getLanduseCategories(basename(classFile))
+  P <- if (recode) loadLanduseRecode(recodeFile) else NULL
 
   message("  Loading and reprojecting crop type map...")
-  cropMap <- terra::rast(rawFile)
   # method = "near" critical for categorical data
-  cropMap <- projectIfNeeded(cropMap, targetCRS, method = "near")
-
-  message("  Computing ", length(categories), " category proportions + hedges layer...")
+  cropMap <- projectIfNeeded(terra::rast(classFile), targetCRS, method = "near")
+  hedgeMap <- if (is.na(hedgeFile)) NULL else if (hedgeFile == classFile) cropMap else projectIfNeeded(terra::rast(hedgeFile), targetCRS, method = "near")
 
   allCatNames <- c("grassland", "winter_cereals", "summer_cereals", "maize",
                     "root_crops", "rapeseed", "sunflower", "vegetables",
                     "legumes", "hedges", "fallow", "grapevine", "hops",
                     "orchards_and_berries")
-
-  layersByScale <- stats::setNames(vector("list", length(scales)), names(scales))
   neededNames <- names(scales)[need]
 
-  for (catName in allCatNames) {
-
-    if (catName == "hedges" && !hasHedges) {
-      # HCTM years: hedges not mapped -- fill with NA
-      message("    hedges -- NA (not mapped in HCTM dataset)")
-
-      for (nm in neededNames) {
-        s <- scales[[nm]]
-        na <- makeCategoryProportionLayer(cropMap, -9999, s$res, "hedges", targetCRS)
-        na[] <- NA
-        layersByScale[[nm]][["hedges"]] <- na
-      }
-      next
-    }
-
-    codes <- categories[[catName]]
-    if (is.null(codes)) next
-
-    message("    ", catName)
-    for (nm in neededNames) {
-      s <- scales[[nm]]
-      layersByScale[[nm]][[catName]] <- makeCategoryProportionLayer(cropMap, codes, s$res, catName, targetCRS)
-    }
-  }
+  message("  Computing ", length(allCatNames), " category proportions (hedges ", if (is.null(hedgeMap)) "NA: not mapped for this year" else "from CTM", ")...")
 
   for (nm in neededNames) {
-    terra::writeRaster(terra::rast(layersByScale[[nm]]), outFiles[[nm]], overwrite = TRUE)
+    s <- scales[[nm]]
+    layers <- list()
+
+    if (recode) {
+      # CTM class shares of the cell -> the class shares HCTM would have mapped (hedges stay the CTM hedges)
+      fr <- lapply(names(ctmCats), function(cn) makeCategoryProportionLayer(cropMap, ctmCats[[cn]], s$res, cn, targetCRS))
+      names(fr) <- names(ctmCats)
+      layers <- applyLanduseRecode(fr, P)
+      layers[["hedges"]] <- fr[["hedges"]]
+    } else {
+      for (cn in setdiff(names(classScheme$cats), "hedges")) {
+        message("    ", nm, ": ", cn)
+        layers[[cn]] <- makeCategoryProportionLayer(cropMap, classScheme$cats[[cn]], s$res, cn, targetCRS)
+      }
+      if (is.null(hedgeMap)) {
+        # no CTM map this year: hedges not mapped -- fill with NA
+        na <- makeCategoryProportionLayer(cropMap, -9999, s$res, "hedges", targetCRS)
+        na[] <- NA
+        layers[["hedges"]] <- na
+      } else {
+        layers[["hedges"]] <- makeCategoryProportionLayer(hedgeMap, ctmCats[["hedges"]], s$res, "hedges", targetCRS)
+      }
+    }
+
+    layers <- layers[allCatNames]
+    terra::writeRaster(terra::rast(layers), outFiles[[nm]], overwrite = TRUE)
+    writeLines(schemeTag, paste0(outFiles[[nm]], ".scheme.txt"))
     message("  Saved ", nm, ": ", outFiles[[nm]])
   }
 

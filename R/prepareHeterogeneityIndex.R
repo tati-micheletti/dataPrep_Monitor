@@ -42,7 +42,8 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
 
       # a cached file counts only if it was made with the CURRENT definition of the index (sidecar <file>.version); older files are recomputed
       versionFile <- paste0(outFile, ".version")
-      versionOk <- file.exists(versionFile) && identical(readLines(versionFile, warn = FALSE)[1], heterogeneityVersion)
+      fileVersion <- paste0(heterogeneityVersion, " | land use: ", landuseSchemeStamp(scaleDir, yr, s$scaleName))   # and from the land use it was computed from (2026-11-03)
+      versionOk <- file.exists(versionFile) && identical(readLines(versionFile, warn = FALSE)[1], fileVersion)
       if (!force && versionOk && isValidRasterFile(outFile)) {
         message(key, " (landscape_heterogeneity) cache hit -- skipping")
         outFiles[[key]] <- outFile
@@ -57,7 +58,7 @@ prepareHeterogeneityIndex <- function(processedRoot, landuseYears,
         next
       }
       terra::writeRaster(heterogeneity, outFile, overwrite = TRUE)
-      writeLines(heterogeneityVersion, versionFile)
+      writeLines(fileVersion, versionFile)
       message("  Saved ", key, ": ", outFile)
       outFiles[[key]] <- outFile
     }

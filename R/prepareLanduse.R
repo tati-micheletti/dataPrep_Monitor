@@ -18,17 +18,20 @@
 #' @param force Logical. If TRUE, recompute and overwrite every year even if
 #'   a valid cached output already exists (e.g. a bug was found in the raw
 #'   crop type maps).
+#' @param preferHCTM,recodeFile Passed to `computeLanduse()`: HCTM wherever it exists, CTM (2024-2025) recoded to HCTM classes with `recodeFile`; `preferHCTM = FALSE` = the old rule.
 #' @return Invisibly, a named list of output file paths per year.
 prepareLanduse <- function(landuseRawDir, processedRoot, landuseYears, targetCRS,
                             habitatResolutions, landscapeResolutions,
-                            pythonScriptPath, requirementsPath, force = FALSE) {
+                            pythonScriptPath, requirementsPath, force = FALSE,
+                            preferHCTM = TRUE, recodeFile = file.path("data", "landuseRecodeCTMtoHCTM.csv")) {
 
   downloadLanduse(landuseRawDir = landuseRawDir,
                    pythonScriptPath = pythonScriptPath,
                    requirementsPath = requirementsPath)
 
   message("Processing land use for years: ", paste(landuseYears, collapse = ", "))
-  message("Datasets: CTM (Schwieder/Tetteh v302) + HCTM (Tetteh 2026)")
+  message("Datasets: CTM (Schwieder/Tetteh v302) + HCTM (Tetteh 2026); rule: ",
+          if (preferHCTM) "HCTM wherever it exists, CTM only after 2023 (recoded to HCTM classes)" else "CTM first, HCTM otherwise (old rule)")
   message("Output categories: 14 (consistent across all years)")
   message("Output scales: ", paste0(habitatResolutions, "m", collapse = "/"), " (habitat), ",
           paste0(landscapeResolutions, "m", collapse = "/"), " (landscape)")
@@ -41,7 +44,9 @@ prepareLanduse <- function(landuseRawDir, processedRoot, landuseYears, targetCRS
                     habitatResolutions = habitatResolutions,
                     landscapeResolutions = landscapeResolutions,
                     targetCRS = targetCRS,
-                    force = force)
+                    force = force,
+                    preferHCTM = preferHCTM,
+                    recodeFile = recodeFile)
   })
   names(outFiles) <- landuseYears
 

@@ -21,13 +21,14 @@ prepareUnmappedShare <- function(processedRoot, landuseYears, habitatResolutions
     scaleDir <- file.path(processedRoot, scaleLabel(s$res))
     outFile <- file.path(scaleDir, paste0("unmapped_other_", yr, "_", s$scaleName, "_", basename(scaleDir), ".tif"))
     key <- paste0(yr, "_", s$scaleName, "_", s$res); versionFile <- paste0(outFile, ".version")
-    versionOk <- file.exists(versionFile) && identical(readLines(versionFile, warn = FALSE)[1], unmappedVersion)
+    fileVersion <- paste0(unmappedVersion, " | land use: ", landuseSchemeStamp(scaleDir, yr, s$scaleName))        # and from the land use it was computed from (2026-11-03)
+    versionOk <- file.exists(versionFile) && identical(readLines(versionFile, warn = FALSE)[1], fileVersion)
     if (!force && versionOk && isValidRasterFile(outFile)) { message(key, " (unmapped_other) cache hit -- skipping"); outFiles[[key]] <- outFile; next }
     message(key, " (unmapped_other) needs (re)computation")
     r <- computeUnmappedShare(yr, scaleDir, s$scaleName, workingArea)
     if (is.null(r)) { message("  Skipped ", key, " -- required land use/land cover file missing"); next }
     terra::writeRaster(r, outFile, overwrite = TRUE)
-    writeLines(unmappedVersion, versionFile)
+    writeLines(fileVersion, versionFile)
     message("  Saved ", key, ": ", outFile)
     outFiles[[key]] <- outFile
   }

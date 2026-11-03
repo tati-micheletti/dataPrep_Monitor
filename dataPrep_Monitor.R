@@ -107,6 +107,12 @@ defineModule(sim, list(
     ## Land use / land cover years -------------------------------------------------
     defineParameter("landuseYears", "numeric", 2005:2025, NA, NA,
                     "Years to process land use (crop type) maps for."),
+    defineParameter("landusePreferHCTM", "logical", TRUE, NA, NA,
+                    "TRUE: classes from HCTM wherever it exists (<= 2023), CTM only after that, recoded to HCTM",
+                    "classes (hedges always from CTM). FALSE: the old rule (CTM first, no recode); cached files",
+                    "made with the other rule are recomputed."),
+    defineParameter("landuseRecodeFile", "character", file.path("data", "landuseRecodeCTMtoHCTM.csv"), NA, NA,
+                    "CTM -> HCTM recode matrix (tools/buildLanduseRecode.R); read only for years that need it."),
     defineParameter("habitatYears", "list", NULL, NA, NA,
                     "Named list, species -> integer vector of years to prepare German",
                     "habitat-scale (200m) occurrence data for that species. Per-species",
@@ -346,7 +352,9 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           landscapeResolutions = landscapeResolutions,
           pythonScriptPath = file.path(modulePath(sim), currentModule(sim), "python", "download_landuse.py"),
           requirementsPath = file.path(modulePath(sim), currentModule(sim), "python", "requirements.txt"),
-          force = P(sim)$rerunLanduse)
+          force = P(sim)$rerunLanduse,
+          preferHCTM = P(sim)$landusePreferHCTM,
+          recodeFile = P(sim)$landuseRecodeFile)
       }
       # ! ----- STOP EDITING ----- ! #
     },
