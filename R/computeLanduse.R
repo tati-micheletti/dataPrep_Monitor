@@ -155,7 +155,14 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
         na[] <- NA
         layers[["hedges"]] <- na
       } else {
-        layers[["hedges"]] <- makeCategoryProportionLayer(hedgeMap, ctmCats[["hedges"]], s$res, "hedges", targetCRS)
+        hl <- makeCategoryProportionLayer(hedgeMap, ctmCats[["hedges"]], s$res, "hedges", targetCRS)
+        # The hedges come from CTM (10 m), the classes from HCTM (30 m): the two maps have another extent and another grid origin,
+        # so the hedge layer is put on the grid of the class layers before they are stacked (found 2026-11-04: "[rast] extents do not match" in 2017)
+        if (!isTRUE(terra::compareGeom(hl, layers[[1]], stopOnError = FALSE))) {
+          hl <- terra::resample(hl, layers[[1]], method = "bilinear")
+          names(hl) <- "hedges"
+        }
+        layers[["hedges"]] <- hl
       }
     }
 

@@ -11,6 +11,14 @@ ctm <- c(200, 200, 1101, 1101, 3001, NA); hctm <- c(200, 200, 110, 110, 200, 200
 mk("CTM_GER_2019_rst_v202_COG.tif", 600, ctm); mk("HCTM_GER_2019_rst_v101_COG.tif", 300, hctm)
 mk("HCTM_GER_2022_rst_v101_COG.tif", 300, hctm)
 mk("CTM_GER_2024_rst_v302_COG.tif", 600, ctm)
+# CTM and HCTM do not cover the same extent in reality (CTM 4016026-4676026 x 2654920-3554920, HCTM 4031326-4672516 x 2684080-3551470): 2018 = CTM larger than HCTM, same grid origin; 2020 = also another origin
+mkx <- function(file, ncells, xmin, xmax, ymin, ymax, codes7) {
+  r <- rast(nrows = ncells, ncols = ncells, xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, crs = "EPSG:3035")
+  cx <- xFromCol(r, seq_len(ncol(r))); col1km <- pmin(pmax(floor(cx / 1000) + 1, 1), 7)          # which 1 km column (1..7) each cell belongs to
+  values(r) <- rep(codes7[col1km], times = nrow(r)); writeRaster(r, file.path(raw, file), overwrite = TRUE) }
+ctm7 <- c(200, 200, 1101, 1101, 3001, NA, 200)
+mkx("CTM_GER_2018_rst_v202_COG.tif", 700, 0, 7000, 0, 7000, ctm7); mkx("HCTM_GER_2018_rst_v101_COG.tif", 300, 0, 6000, 0, 6000, c(hctm, 200))
+mkx("CTM_GER_2020_rst_v202_COG.tif", 700, 0, 7000, 0, 7000, ctm7); mkx("HCTM_GER_2020_rst_v101_COG.tif", 190, 500, 6200, 500, 6200, c(hctm, 200))
 cats <- c(names(landuseCategoriesCTM()), "other"); P <- diag(length(cats)); dimnames(P) <- list(cats, cats)        # toy recode: identity except ...
 P["grassland", ] <- 0; P["grassland", "grassland"] <- 0.5; P["grassland", "fallow"] <- 0.5                          # CTM grassland = half grassland, half fallow in HCTM
 P["other", ] <- 0; P["other", "grassland"] <- 0.2; P["other", "other"] <- 0.8                                       # 20% of what CTM leaves unmapped is grassland in HCTM
@@ -28,6 +36,10 @@ suppressMessages({
   same(row1(r24, "grassland"), c(0.5, 0.5, 0, 0, 1, 0.2), "2024 grassland recoded"); same(row1(r24, "fallow"), c(0.5, 0.5, 0, 0, 0, 0), "2024 fallow recoded")
   same(row1(r24, "winter_cereals"), c(0, 0, 1, 1, 0, 0), "2024 winter cereals kept"); same(row1(r24, "hedges"), c(0, 0, 0, 0, 1, 0), "2024 hedges kept from CTM")
   stopifnot(identical(names(r24), names(r19))); cat("ok: same 14 layers in the same order in every year\n")
+  r18 <- run(2018)                                                                         # CTM covers more than HCTM: must not fail ("extents do not match"), hedges on the class grid
+  same(row1(r18, "hedges"), c(0, 0, 0, 0, 1, 0), "2018 hedges from a larger CTM map land on the class grid"); same(row1(r18, "grassland"), c(1, 1, 0, 0, 1, 1), "2018 grassland from HCTM")
+  r20 <- run(2020); stopifnot(isTRUE(compareGeom(r20[["hedges"]], r20[["grassland"]], stopOnError = FALSE)))
+  hv <- as.vector(values(r20[["hedges"]])); stopifnot(max(hv, na.rm = TRUE) > 0.4, min(hv, na.rm = TRUE) >= 0, max(hv, na.rm = TRUE) <= 1, !anyNA(hv), abs(sum(hv) - nrow(r20)) < 0.01)   # a hedge column falls half into each of two class cells (0.5 + 0.5 per row): the total mass (one per row) is kept; cat("ok: 2020 hedges on the class grid although CTM and HCTM have another extent and grid origin\n")
   rl <- run(2019, preferHCTM = FALSE); same(row1(rl, "grassland"), c(1, 1, 0, 0, 0, 0), "2019 old rule: classes from CTM"); same(row1(rl, "hedges"), c(0, 0, 0, 0, 1, 0), "2019 old rule: hedges from CTM")
 })
 msgs <- function(expr) { m <- character(); withCallingHandlers(expr, message = function(c) { m <<- c(m, conditionMessage(c)); invokeRestart("muffleMessage") }); m }
