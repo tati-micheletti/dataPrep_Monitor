@@ -90,10 +90,10 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
 #' so these files are cropped to the full study area + buffer and are a few cells larger on every side. The fixed hedge mean is made on the grid of the first hedge year (HCTM footprint) and resampled onto each file, so the
 #' few cells of the larger grids that lie beyond that footprint get no value (v3 run, 5 Nov 2026: 2 to 5 cells per file at the four scales, all in the 2024 and 2025 files, found by `checkNoNAInsideStudyArea()`).
 #' The raw CTM hedge maps themselves cover the whole area. A cell is filled only if it is empty in `hedges` AND the first other layer of the file has a value there (so the masked outside of the study area stays empty);
-#' it takes the value of the nearest valid cell within `maxDistM` metres (the mean of the cells at equal distance; 1,500 m covers the 1,000 m buffer plus the offset of the grids). More than `maxCells` empty cells, or a cell with no valid neighbour within `maxDistM`, is NOT a rim effect and stops.
+#' it takes the value of the nearest valid cell within `maxDistM` metres PLUS 1.5 cell sizes (the mean of the cells at equal distance; the larger grids overhang by up to about 1.1 km and a gap cell can lie a cell beyond that: in the v3 prep a 1 km cell north of Germany had its nearest valid neighbour 2,000 m away, and the neighbouring cell of a 5 km map is 5,000 m away). More than `maxCells` empty cells, or a cell with no valid neighbour within `maxDistM`, is NOT a rim effect and stops.
 #' A sidecar `<file>.hedgegaps` records the check (it is skipped while the file is not newer than the sidecar), so a second call changes nothing. The sidecar `.studyarea` is kept: the filled cells lie inside the mask.
 #'
-#' @param file Character. A processed land-use file. @param dryRun Logical. Only report. @param maxDistM Numeric. How far (m) to look for a valid neighbour. @param maxCells Integer. Safety limit.
+#' @param file Character. A processed land-use file. @param dryRun Logical. Only report. @param maxDistM Numeric. How far (m) to look for a valid neighbour, before the 1.5 cell sizes that are added. @param maxCells Integer. Safety limit.
 #' @return NULL if nothing had to be filled, else a one-row data.frame (scale, year, action, from = number of cells).
 fillHedgeGaps <- function(file, dryRun = FALSE, maxDistM = 1500, maxCells = 5000L) {
   sc <- paste0(file, ".hedgegaps")
@@ -107,14 +107,14 @@ fillHedgeGaps <- function(file, dryRun = FALSE, maxDistM = 1500, maxCells = 5000
   if (length(cl) > maxCells) stop("fillHedgeGaps(): ", length(cl), " empty hedge cells in ", scl, "/", basename(file), " (limit ", maxCells, "): this is not a rim effect; recompute the land use (rerunLanduse).")
   if (dryRun) return(data.frame(scale = scl, year = yr, action = "would fill gaps", from = length(cl)))
   nr <- terra::nrow(h); nc <- terra::ncol(h); rc <- terra::rowColFromCell(h, cl); xy <- terra::xyFromCell(h, cl)
-  resM <- terra::res(h)[1]; window <- as.integer(ceiling(maxDistM / resM))                                    # the search distance is in metres, so it fits every scale (200 m: 8 cells; 1 km: 2; 5 km: 1)
+  resM <- terra::res(h)[1]; capM <- maxDistM + 1.5 * resM; window <- as.integer(ceiling(capM / resM))             # the larger grids overhang by up to about 1.1 km, and a gap cell can lie one cell beyond that, so the search distance is maxDistM PLUS 1.5 cells: 200 m cells 1,800 m; 700 m 2,550 m; 1 km 3,000 m; 5 km 9,000 m
   val <- rep(NA_real_, length(cl)); dst <- rep(NA_real_, length(cl))
   for (k in seq_along(cl)) {
     r0 <- max(1L, rc[k, 1] - window); r1 <- min(nr, rc[k, 1] + window); c0 <- max(1L, rc[k, 2] - window); c1 <- min(nc, rc[k, 2] + window); ncw <- c1 - c0 + 1L
     w <- as.vector(terra::values(h, mat = FALSE, row = r0, nrows = r1 - r0 + 1L, col = c0, ncols = ncw)); ok <- which(!is.na(w))
     d <- sqrt(((ok - 1L) %/% ncw + r0 - rc[k, 1])^2 + ((ok - 1L) %% ncw + c0 - rc[k, 2])^2) * resM       # distance in metres to every valid cell of the window
-    keep <- d <= maxDistM + 1e-9; ok <- ok[keep]; d <- d[keep]
-    if (!length(ok)) stop("fillHedgeGaps(): the empty hedge cell at x = ", round(xy[k, 1]), ", y = ", round(xy[k, 2]), " (", scl, "/", basename(file), ") has no valid cell within ", maxDistM, " m: not a rim effect.")
+    keep <- d <= capM + 1e-9; ok <- ok[keep]; d <- d[keep]
+    if (!length(ok)) stop("fillHedgeGaps(): the empty hedge cell at x = ", round(xy[k, 1]), ", y = ", round(xy[k, 2]), " (", scl, "/", basename(file), ") has no valid cell within ", capM, " m: not a rim effect.")
     val[k] <- mean(w[ok][d <= min(d) + 1e-9]); dst[k] <- min(d)
   }
   v <- terra::values(h, mat = FALSE); v[cl] <- val; hn <- terra::rast(h); terra::values(hn) <- v; names(hn) <- "hedges"; rm(v)            # a fresh in-memory layer: `h[cl] <- val` kept a link to the file, which Windows then refuses to replace

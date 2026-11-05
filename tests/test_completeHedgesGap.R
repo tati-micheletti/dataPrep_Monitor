@@ -37,4 +37,16 @@ e1 <- tryCatch({ fillHedgeGaps(f2, maxCells = 2L); "" }, error = function(e) con
 m3 <- rast(nrows = 20, ncols = 20, xmin = 0, xmax = 2000, ymin = 0, ymax = 2000, crs = "EPSG:3035", nlyrs = 2); names(m3) <- c("crop", "hedges"); hd <- rep(0.3, 400)
 for (rw in 6:14) for (cl in 6:14) hd[cellFromRowCol(m3, rw, cl)] <- NA; values(m3) <- cbind(runif(400), hd); f3 <- file.path(d2, "scale_02", "landuse_2025_habitat_scale_02.tif"); writeRaster(m3, f3, overwrite = TRUE)
 e2 <- tryCatch({ fillHedgeGaps(f3, maxDistM = 300); "" }, error = function(e) conditionMessage(e)); stopifnot(grepl("no valid cell within", e2)); message("(3) an empty block farther than maxDistM from valid cells: stops")
+
+# ---- (4) coarse cells: the nearest valid neighbour can be farther than maxDistM = 1,500 m. The first versions of fillHedgeGaps() stopped on the v3 prep (5 Nov 2026): a 1 km cell north of Germany had its nearest valid cell 2,000 m away; on the 5 km maps the neighbour is 5,000 m away ----
+mkc <- function(res, nr, gapRows) { m <- rast(nrows = nr, ncols = nr, xmin = 0, xmax = nr * res, ymin = 0, ymax = nr * res, crs = "EPSG:3035", nlyrs = 2); names(m) <- c("crop", "hedges"); hd <- rep(0.4, ncell(m))
+  for (rw in gapRows) for (cl in 1:nr) hd[cellFromRowCol(m, rw, cl)] <- NA; values(m) <- cbind(runif(ncell(m)), hd); d <- file.path(tempfile(), paste0("scale_", res)); dir.create(d, recursive = TRUE)
+  f <- file.path(d, "landuse_2024_landscape_scale_1.tif"); writeRaster(m, f, overwrite = TRUE); f }
+f4 <- mkc(1000, 8, 1:2)                                                          # 1 km: rows 1 and 2 empty, the nearest valid row is 2,000 m from row 1
+g4 <- fillHedgeGaps(f4); stopifnot(g4$from == 16); h4 <- values(rast(f4)[["hedges"]], mat = FALSE); stopifnot(!anyNA(h4), isTRUE(all.equal(unique(round(h4, 6)), 0.4)))
+message("(4) 1 km cells: a gap cell 2,000 m from the nearest valid cell is filled")
+f5 <- mkc(5000, 6, 1); g5 <- fillHedgeGaps(f5); stopifnot(g5$from == 6, !anyNA(values(rast(f5)[["hedges"]], mat = FALSE)))
+message("(4) 5 km cells: the neighbour at 5,000 m is reachable")
+f6 <- mkc(200, 40, 1:3); stopifnot(is.null(tryCatch(fillHedgeGaps(f6), error = function(e) NULL)) == FALSE)           # 200 m: 3 rows empty = 600 m to the nearest valid row: filled
+message("(4) 200 m cells: three empty rows (600 m) are filled")
 message("test_completeHedgesGap: ok")
