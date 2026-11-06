@@ -392,7 +392,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
         processedRoot <- file.path(inputPath(sim), "predictors", "processed")
 
         # hedges: ONE fixed layer (mean of the years with hedge data) written IN THE FILES of every year (hedgesMode = 'nearest': the years without data take the nearest preceding year), so every layer is complete
-        completeHedges(processedRoot, P(sim)$landuseYears, habitatResolutions, landscapeResolutions, mode = P(sim)$hedgesMode)
+        completeHedges(processedRoot, P(sim)$landuseYears, habitatResolutions, landscapeResolutions, mode = P(sim)$hedgesMode, repairGaps = FALSE)      # the rim repair runs after the crop (event applyStudyArea)
 
         distPaths <- prepareDistToWoodland(
           landcoverRawDir = file.path(inputPath(sim), "predictors", "raw", "landcover"),
@@ -432,6 +432,11 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
       applyStudyAreaToProcessed(processedRoot = file.path(inputPath(sim), "predictors", "processed"), area = sim$studyArea,
                                 recordsBufferM = P(sim)$recordsBufferM, climatePredictBufferM = P(sim)$climatePredictBufferM,
                                 climateScaleLabel = scaleLabel(P(sim)$climateResolutionM), ebba2TrainingYear = P(sim)$ebba2TrainingYear)
+      if (identical(P(sim)$hedgesMode, "mean")) {                       # 2026-11-06: hedge rim gaps are repaired AFTER the crop (cells of the larger grids beyond the footprint of the older ones; DECISIONS 2026-11-05)
+        hRes <- if (is.null(P(sim)$distinctHabitatResolutions)) P(sim)$habitatResolutionM else P(sim)$distinctHabitatResolutions
+        lRes <- if (is.null(P(sim)$distinctLandscapeResolutions)) P(sim)$landscapeResolutionM else P(sim)$distinctLandscapeResolutions
+        repairHedgeGaps(file.path(inputPath(sim), "predictors", "processed"), hRes, lRes)
+      }
       # ! ----- STOP EDITING ----- ! #
     },
 

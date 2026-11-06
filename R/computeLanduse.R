@@ -142,7 +142,8 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
       # CTM class shares of the cell -> the class shares HCTM would have mapped (hedges stay the CTM hedges)
       fr <- lapply(names(ctmCats), function(cn) makeCategoryProportionLayer(cropMap, ctmCats[[cn]], s$res, cn, targetCRS))
       names(fr) <- names(ctmCats)
-      layers <- applyLanduseRecode(fr, P)
+      mapped <- if (all(c("other_mapped", "nodata") %in% rownames(P))) makeMappedShareLayer(cropMap, s$res, targetCRS) else NULL      # 2026-11-06
+      layers <- applyLanduseRecode(fr, P, mapped = mapped)
       layers[["hedges"]] <- fr[["hedges"]]
     } else {
       for (cn in setdiff(names(classScheme$cats), "hedges")) {

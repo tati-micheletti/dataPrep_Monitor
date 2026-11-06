@@ -20,6 +20,7 @@ for (y in c(2005, 2016, 2017, 2022, 2024)) { h <- rast(fl(y))[["hedges"]]; stopi
 stopifnot(all(file.exists(sapply(2005:2025, function(y) paste0(fl(y), ".hedgesfixed"))))); message("mean: every year has the mean layer of the 7 years with data")
 r2 <- completeHedges(d2, 2022:2025, 200, numeric(0), mode = "mean"); stopifnot(nrow(r2) == 0); message("mean: a second call changes nothing")
 mk2(2019, TRUE); file.remove(paste0(fl(2019), ".hedgesfixed")); mk2(2020, TRUE); file.remove(paste0(fl(2020), ".hedgesfixed"))      # two files recomputed (raw hedges, no sidecar)
-r3 <- completeHedges(d2, 2022:2025, 200, numeric(0), mode = "mean"); stopifnot(nrow(r3) == 21)                                     # the mean is made anew from the 2 raw years: all 21 files change
+gp <- tryCatch(completeHedges(d2, 2022:2025, 200, numeric(0), mode = "mean"), error = function(e) conditionMessage(e)); stopifnot(is.character(gp), grepl("partial recompute", gp)); message("mean: a partial recompute (2 of the 7 hedge years) stops (guard, audit S2-28)")
+r3 <- completeHedges(d2, 2022:2025, 200, numeric(0), mode = "mean", allowPartialMean = TRUE); stopifnot(nrow(r3) == 21)                                     # the mean is made anew from the 2 raw years: all 21 files change
 exp2 <- mean(rast(lapply(c(2019, 2020), function(y) rast(fl(y))[["hedges"]])), na.rm = TRUE)
 stopifnot(isTRUE(all.equal(as.vector(values(rast(fl(2005))[["hedges"]])), as.vector(values(exp2)), tolerance = 1e-5))); message("mean: recomputed files give a new mean over the raw years; test_completeHedges (mean): ok")

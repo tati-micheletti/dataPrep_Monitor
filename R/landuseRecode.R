@@ -19,13 +19,27 @@ loadLanduseRecode <- function(path) {
 #' @param P Matrix from `loadLanduseRecode()`.
 #' @param toClasses Character. HCTM classes to return (default: all columns of `P` except "hedges" and "other").
 #' @return Named list of SpatRaster, the expected share of each HCTM class: sum over the CTM classes j (and of "other" = what the CTM classes do not cover) of share(j) * P[j, k].
-applyLanduseRecode <- function(fracs, P, toClasses = setdiff(colnames(P), c("hedges", "other"))) {
+applyLanduseRecode <- function(fracs, P, toClasses = setdiff(colnames(P), c("hedges", "other")), mapped = NULL) {
   stopifnot(all(names(fracs) %in% rownames(P)), all(toClasses %in% colnames(P)))
-  src <- fracs
-  src[["other"]] <- terra::clamp(1 - Reduce(`+`, fracs), 0, 1)
+  src <- fracs; tot <- Reduce(`+`, fracs)
+  if (all(c("other_mapped", "nodata") %in% rownames(P))) {
+    # 2026-11-06: the matrix is fitted INSIDE Germany with CTM "other" split in two. Both crop maps map only the agricultural area; outside it they have no data (about 42% of Germany), and the HCTM layers give those cells 0 for every class.
+    # "other" = 1 - sum(classes) made such a cell "other" = 1, and the matrix row (78% crop) turned forests and towns into grassland (grassland x2 at 2024, continuity check 2026-11-06). Now only the MAPPED part that no class covers is "other_mapped";
+    # the part without data is "nodata" (its row: mostly "other", a few percent crop = what HCTM maps where CTM has no data).
+    if (is.null(mapped)) stop("applyLanduseRecode(): this matrix has the rows other_mapped and nodata: the share of each cell that the CTM map covers (`mapped`) is needed.")
+    src[["other_mapped"]] <- terra::clamp(mapped - tot, 0, 1); src[["nodata"]] <- terra::clamp(1 - mapped, 0, 1)
+  } else src[["other"]] <- terra::clamp(1 - tot, 0, 1)                                          # a matrix fitted before 2026-11-06 (one "other" row): the old, wrong application, kept only to read old files
   stats::setNames(lapply(toClasses, function(k) {
     out <- Reduce(`+`, lapply(names(src), function(j) P[j, k] * src[[j]])); names(out) <- k; out
   }), toClasses)
+}
+
+#' Share of each cell that the categorical map covers (not NA), on the grid of the class proportions (2026-11-06)
+#' Same steps as `makeCategoryProportionLayer()`, with "is not NA" instead of "is in these codes".
+makeMappedShareLayer <- function(categoricalMap, targetRes, targetCRS) {
+  binary <- terra::app(categoricalMap, function(x) as.integer(!is.na(x)))
+  prop <- terra::aggregate(binary, fact = round(targetRes / terra::res(categoricalMap)[1]), fun = "mean", na.rm = TRUE)
+  prop <- regridToResolution(prop, targetRes, targetCRS, method = "bilinear"); names(prop) <- "mapped"; prop
 }
 
 #' Stamp of the land-use file a derived layer (heterogeneity, unmapped share) is computed from

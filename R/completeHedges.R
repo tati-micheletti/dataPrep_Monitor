@@ -20,7 +20,7 @@
 #' @param habitatResolutions,landscapeResolutions Numeric vectors (m).
 #' @param dryRun Logical. Only report.
 #' @return Invisibly, a data.frame (scale, year, action, from).
-completeHedges <- function(processedRoot, landuseYears, habitatResolutions, landscapeResolutions, dryRun = FALSE, mode = c("mean", "nearest")) {
+completeHedges <- function(processedRoot, landuseYears, habitatResolutions, landscapeResolutions, dryRun = FALSE, mode = c("mean", "nearest"), repairGaps = TRUE, allowPartialMean = FALSE) {
   mode <- match.arg(mode)
   scales <- c(lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)), lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r)))
   rows <- list()
@@ -38,6 +38,11 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
         if (all(isFixed)) { message("hedges ", basename(d), ": all files already carry the fixed layer, nothing to do"); next }
         stop("completeHedges(): no year with raw hedge data at ", basename(d), " and not every file carries the fixed layer; recompute the land use (rerunLanduse).")
       }
+      # 2026-11-06 guard (audit S2-28): the fixed layer was made from several years; if only some of them have raw hedge data now (a partial recompute of the land use), a new mean would be made from those years only and written into ALL files.
+      oldYears <- suppressWarnings(as.integer(unlist(strsplit(sub("^.*hedge layers of ", "", unique(vapply(years[isFixed], fixedOf, character(1)))), ","))))
+      oldYears <- unique(oldYears[!is.na(oldYears)])
+      if (!allowPartialMean && length(oldYears) && !all(oldYears %in% realM)) stop("completeHedges(): the fixed hedge layer was made from the years ", paste(oldYears, collapse = ","), " but only ", paste(realM, collapse = ","),
+           " have raw hedge data now: a partial recompute would give a mean of those years only. Recompute the land use of ALL these years (delete their landuse_<year>_* files and sidecars) or call with allowPartialMean = TRUE.")
       tag <- paste0("fixed mean of the hedge layers of ", paste(realM, collapse = ","))
       todo <- years[vapply(years, fixedOf, character(1)) != tag]
       if (dryRun) { for (y in todo) rows[[length(rows) + 1]] <- data.frame(scale = basename(d), year = y, action = "would fix", from = length(realM)); next }
@@ -74,14 +79,20 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
       rows[[length(rows) + 1]] <- data.frame(scale = basename(d), year = y, action = "filled", from = ref)
     }
   }
-  # 2026-11-05: the rim of the larger grids (see fillHedgeGaps). Runs for EVERY land-use file, also those that already carry the fixed layer, so a file made before this repair is repaired too.
-  if (mode == "mean") for (s in scales) {
-    d <- file.path(processedRoot, scaleLabel(s$res))
-    for (f in list.files(d, pattern = paste0("^landuse_[0-9]{4}_", s$scaleName, "_", basename(d), "[.]tif$"), full.names = TRUE)) {
-      g <- fillHedgeGaps(f, dryRun = dryRun); if (!is.null(g)) rows[[length(rows) + 1]] <- g
-    }
-  }
+  # 2026-11-05: the rim of the larger grids (see fillHedgeGaps). 2026-11-06: in the pipeline this runs AFTER the study-area crop (repairGaps = FALSE here, repairHedgeGaps() in the applyStudyArea event): on uncropped files it would see the whole 15 km margin as gaps.
+  if (mode == "mean" && repairGaps) { g <- repairHedgeGaps(processedRoot, habitatResolutions, landscapeResolutions, dryRun); if (!is.null(g) && nrow(g)) rows[[length(rows) + 1]] <- g }
   invisible(if (length(rows)) do.call(rbind, rows) else data.frame(scale = character(), year = integer(), action = character(), from = integer()))
+}
+
+#' Repair the rim gaps (`fillHedgeGaps()`) of every land-use file of every scale; runs after the study-area crop (2026-11-06)
+#' @return data.frame (scale, year, action, from) of the files repaired, or NULL.
+repairHedgeGaps <- function(processedRoot, habitatResolutions, landscapeResolutions, dryRun = FALSE) {
+  scales <- c(lapply(habitatResolutions, function(r) list(scaleName = "habitat", res = r)), lapply(landscapeResolutions, function(r) list(scaleName = "landscape", res = r))); rows <- list()
+  for (s in scales) {
+    d <- file.path(processedRoot, scaleLabel(s$res))
+    for (f in list.files(d, pattern = paste0("^landuse_[0-9]{4}_", s$scaleName, "_", basename(d), "[.]tif$"), full.names = TRUE)) { g <- fillHedgeGaps(f, dryRun = dryRun); if (!is.null(g)) rows[[length(rows) + 1]] <- g }
+  }
+  if (length(rows)) do.call(rbind, rows) else NULL
 }
 
 #' Fill the empty cells of the `hedges` layer of ONE land-use file from the nearest valid cell (2026-11-05)
