@@ -124,6 +124,7 @@ fillHedgeGaps <- function(file, dryRun = FALSE, maxDistM = 1500, maxCells = 5000
   rm(r, h, hn, out); invisible(gc())
   for (i in 1:6) { if (suppressWarnings(file.remove(file))) break; invisible(gc()); Sys.sleep(0.5) }                      # Windows keeps the old file open until terra lets go; on EVE the first try works
   if (file.exists(file) || !file.rename(part, file)) stop("fillHedgeGaps(): could not replace ", file, " by the repaired copy ", part, "; the original is untouched or the repaired copy is left beside it.")
+  sfStudy <- paste0(file, ".studyarea"); if (file.exists(sfStudy)) Sys.setFileTime(sfStudy, Sys.time())      # the crop is still valid (only cells inside the mask were filled): refresh the marker, or applyStudyAreaToProcessed() would see a file newer than its marker and crop it again
   writeLines(paste0(length(cl), " gap cell(s) filled, farthest source ", format(max(dst), digits = 3), " m away; ", Sys.Date()), sc)
   first <- seq_len(min(6L, length(cl)))
   message("hedges gaps ", scl, "/", basename(file), ": ", length(cl), " empty cell(s) filled from the nearest valid cell (farthest source ", format(max(dst), digits = 3), " m away); first at (x, y) = ",
