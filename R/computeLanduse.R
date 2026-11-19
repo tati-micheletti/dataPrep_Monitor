@@ -85,13 +85,14 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
   })
 
   # What this output is made from: the cache below is valid only for the same rule, same source files, same recode
-  schemeTag <- if (!preferHCTM) "legacy-ctm-first" else
+  schemeTag <- if (!preferHCTM) paste0("legacy-ctm-first|classes=", if (is.na(classFile)) "NA" else basename(classFile)) else      # CTM-first rule: the tag now carries the source file (product version is in its name); 2026-11-19
     paste0("hctm-first|classes=", if (is.na(classFile)) "NA" else basename(classFile), "|hedges=", if (is.na(hedgeFile)) "NA" else basename(hedgeFile),
            if (recode && !is.null(recodeFile) && file.exists(recodeFile)) paste0("|recode=", unname(tools::md5sum(recodeFile))) else "")
   schemeMatches <- function(f) {
     sc <- paste0(f, ".scheme.txt")
     if (!file.exists(sc)) return(startsWith(schemeTag, "legacy"))                            # files without a record were made by the old rule
-    identical(readLines(sc, warn = FALSE)[1], schemeTag)
+    sc1 <- readLines(sc, warn = FALSE)[1]
+    identical(sc1, schemeTag) || (identical(sc1, "legacy-ctm-first") && startsWith(schemeTag, "legacy-ctm-first|"))    # a CTM-first file written before 2026-11-19 has the tag without file name: still accepted (no recompute)
   }
 
   # Independent per-scale-entry cache check (Lisa Hildebrand's v2 pattern,
