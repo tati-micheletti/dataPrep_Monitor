@@ -45,16 +45,12 @@ computeLanduse <- function(year, landuseRawDir, processedRoot,
                             preferHCTM = TRUE, recodeFile = file.path("data", "landuseRecodeCTMtoHCTM.csv")) {
 
   # Raw files for this year: the CTM maps (Schwieder v202, Tetteh v302) and the HCTM map (Tetteh 2026)
-  ctmPatterns <- c(file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v202_COG.tif", year)),
-                    file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v302_COG.tif", year)),
-                    # 2025 has a month suffix in the filename
-                    file.path(landuseRawDir, sprintf("CTM_GER_%d_rst_v302_2025_08_COG.tif", year)))
+  # 2026-11-25: the CTM file is found by pattern (findCtmFile(): highest version, finished before in-season, later month first), not by a name written into the code.
+  # Before, every new in-season month ("..._2025_08_...", "..._2026_09_...") or the finished map needed an edit here.
+  ctmFound <- findCtmFile(year, landuseRawDir)
   hctmPath <- file.path(landuseRawDir, sprintf("HCTM_GER_%d_rst_v101_COG.tif", year))
 
-  ctmFile <- NA_character_
-  for (p in ctmPatterns) {
-    if (file.exists(p)) { ctmFile <- p; break }
-  }
+  ctmFile <- ctmFound$file
   hctmFile <- if (file.exists(hctmPath)) hctmPath else NA_character_
 
   # classFile = the map the classes come from; hedgeFile = the map the hedges come from (only CTM has them)
