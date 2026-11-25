@@ -235,7 +235,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     # german_name from speciesCanonical.csv (a DIFFERENT encoding, Latin-1),
     # and a locale-dependent mismatch here is what silently zeroed out every
     # Buteo buteo presence at landscape scale.
-    mhbRaw <- read.csv(mhbObsPath, header = TRUE, fileEncoding = "UTF-8")
+    mhbRaw <- readMhbObservations(mhbObsPath, germanNames = germanNames)      # 2026-11-26: old or new layout (the new one has no German name column: taken from the roster lookup)
     mhbRaw <- mhbRaw |>
       dplyr::mutate(date = as.Date(DATE_TIME, "%Y-%m-%d"),
                      year = as.integer(format(date, "%Y")),

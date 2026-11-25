@@ -90,7 +90,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   # fileEncoding is explicit (not left to the process's ambient locale) because
   # this file is UTF-8 -- see the matching note in sharedSpeciesCanonical.R's
   # loadSpeciesCanonical() for why leaving this to locale guessing is unsafe.
-  mhbRaw <- read.csv(mhbObsPath, header = TRUE, fileEncoding = "UTF-8")
+  mhbRaw <- readMhbObservations(mhbObsPath)      # 2026-11-26: the old layout exactly as before (read.csv, UTF-8) or the new cleaned export of 13 Nov 2026 mapped to the old column names
   # Names in the point-count file that are a subspecies or a variant of a roster species (e.g. "Motacilla flava flava", "Motacilla flava thunbergi" for the roster's "Motacilla flava") are
   # counted as that species: a named vector, name in the file -> roster name (tools/sharedConfig.R: sharedDbirdNameAliases). Without it those records would silently be missing.
   if (length(speciesNameAliases)) {
