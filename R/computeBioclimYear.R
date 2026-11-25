@@ -13,11 +13,23 @@
 #' @param targetCRS Character. Output CRS, e.g. "EPSG:3035".
 #' @param climateResolutionM Numeric. Output resolution in metres.
 #' @param monthlyMaxYr Integer. Last year with a CHELSA monthly source.
+#' @param climateLastYear Integer or NA. Last year with CHELSA data (2025: daily data end 30 Sep 2025). A `targetYear` after it gets an explicit, flagged copy
+#'   of the layer of `climateLastYear` (see `carryForwardBioclim()`); NA (default) = no limit, nothing changes.
 #' @return Invisibly, the path to the saved bioclim raster.
 computeBioclimYear <- function(targetYear, windowLength, climateOutputDir,
                                 chelsaMonthlyDir, europeBbox, chelsaBase,
                                 targetCRS, climateResolutionM,
-                                monthlyMaxYr = 2021L) {
+                                monthlyMaxYr = 2021L, climateLastYear = NA_integer_) {
+
+  # 2026-11-25: a year after the last year with climate data is a flagged copy of the last real layer (not a silently thinner window average)
+  cf <- carryForwardBioclim(targetYear, climateLastYear, windowLength, climateOutputDir)
+  if (cf$carried) {
+    if (!isValidRasterFile(cf$source))
+      computeBioclimYear(climateLastYear, windowLength, climateOutputDir, chelsaMonthlyDir, europeBbox, chelsaBase,
+                         targetCRS, climateResolutionM, monthlyMaxYr, climateLastYear = NA_integer_)
+    writeCarriedForwardBioclim(cf, targetYear, climateLastYear)
+    return(invisible(cf$file))
+  }
 
   windowStart <- targetYear - (windowLength - 1)
   windowYears <- windowStart:targetYear

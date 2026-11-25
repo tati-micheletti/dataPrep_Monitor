@@ -97,6 +97,9 @@ defineModule(sim, list(
     ## Climate --------------------------------------------------------------------
     defineParameter("climateTargetYears", "numeric", 2005:2025, NA, NA,
                     "Target years to compute rolling-window bioclim climatologies for."),
+    defineParameter("climateLastYear", "numeric", NA_integer_, NA, NA,
+                    "Last year with CHELSA climate data (2025: daily data end 30 Sep 2025). A target year after it uses",
+                    "an explicit, flagged copy of that year's layer (2026-11-25 rule; see carryForwardBioclim()). NA = no limit."),
     defineParameter("climateWindowLength", "numeric", 6, NA, NA,
                     "Number of years in the rolling window (Y-5 to Y) used to compute",
                     "each target year's bioclim climatology."),
@@ -314,7 +317,8 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           climateResolutionM = P(sim)$climateResolutionM,
           chelsaMonthlyDir = file.path(inputPath(sim), "predictors", "raw", "chelsa_monthly", "europe"),
           climateOutputDir = file.path(inputPath(sim), "predictors", "processed",
-                                        scaleLabel(P(sim)$climateResolutionM)))
+                                        scaleLabel(P(sim)$climateResolutionM)),
+          climateLastYear = P(sim)$climateLastYear)
       }
       # ! ----- STOP EDITING ----- ! #
     },

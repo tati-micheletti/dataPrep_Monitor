@@ -13,13 +13,14 @@
 #' @param climateOutputDir Character. Directory to save bioclim rasters in.
 #' @param chelsaBase Character. Base URL of the CHELSA archive.
 #' @param monthlyMaxYr Integer. Last year with a CHELSA monthly source.
+#' @param climateLastYear Integer or NA. Last year with CHELSA data; later target years are flagged copies of that year's layer (see `carryForwardBioclim()`). NA = no limit.
 #' @return Invisibly, a named list of output bioclim raster paths, one per
 #'   target year.
 prepareClimateData <- function(climateTargetYears, climateWindowLength,
                                 europeBboxVec, targetCRS, climateResolutionM,
                                 chelsaMonthlyDir, climateOutputDir,
                                 chelsaBase = "https://os.unil.cloud.switch.ch/chelsa02/chelsa/global",
-                                monthlyMaxYr = 2021L) {
+                                monthlyMaxYr = 2021L, climateLastYear = NA_integer_) {
 
   dir.create(chelsaMonthlyDir, recursive = TRUE, showWarnings = FALSE)
   dir.create(climateOutputDir, recursive = TRUE, showWarnings = FALSE)
@@ -48,7 +49,8 @@ prepareClimateData <- function(climateTargetYears, climateWindowLength,
                         chelsaBase = chelsaBase,
                         targetCRS = targetCRS,
                         climateResolutionM = climateResolutionM,
-                        monthlyMaxYr = monthlyMaxYr)
+                        monthlyMaxYr = monthlyMaxYr,
+                        climateLastYear = climateLastYear)
   })
 
   names(outFiles) <- climateTargetYears
