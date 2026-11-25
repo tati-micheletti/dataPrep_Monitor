@@ -41,15 +41,26 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
       # 2026-11-06 guard (audit S2-28): the fixed layer was made from several years; if only some of them have raw hedge data now (a partial recompute of the land use), a new mean would be made from those years only and written into ALL files.
       oldYears <- suppressWarnings(as.integer(unlist(strsplit(sub("^.*hedge layers of ", "", unique(vapply(years[isFixed], fixedOf, character(1)))), ","))))
       oldYears <- unique(oldYears[!is.na(oldYears)])
-      if (!allowPartialMean && length(oldYears) && !all(oldYears %in% realM)) stop("completeHedges(): the fixed hedge layer was made from the years ", paste(oldYears, collapse = ","), " but only ", paste(realM, collapse = ","),
-           " have raw hedge data now: a partial recompute would give a mean of those years only. Recompute the land use of ALL these years (delete their landuse_<year>_* files and sidecars) or call with allowPartialMean = TRUE.")
-      tag <- paste0("fixed mean of the hedge layers of ", paste(realM, collapse = ","))
+      adopt <- FALSE
+      if (!allowPartialMean && length(oldYears) && !all(oldYears %in% realM)) {
+        # 2026-11-26: if ONLY years that were not part of the old mean carry raw hedge data (a NEW year, e.g. 2026), they ADOPT the existing fixed layer: the mean is never made again, so the
+        # inputs of every earlier year (and with them the stored fits and predictions) stay exactly as they are. A mix with years of the old mean is a partial recompute: stop, as before.
+        if (any(realM %in% oldYears)) stop("completeHedges(): the fixed hedge layer was made from the years ", paste(oldYears, collapse = ","), " but only ", paste(realM, collapse = ","),
+             " have raw hedge data now: a partial recompute would give a mean of those years only. Recompute the land use of ALL these years (delete their landuse_<year>_* files and sidecars) or call with allowPartialMean = TRUE.")
+        adopt <- TRUE
+      }
+      if (adopt) {
+        fixedTags <- unique(vapply(years[isFixed], fixedOf, character(1)))
+        if (length(fixedTags) != 1) stop("completeHedges(): the files of ", basename(d), " carry different fixed-layer records (", paste(fixedTags, collapse = " | "), "); cannot adopt one for the new year(s) ", paste(realM, collapse = ","), ".")
+        tag <- fixedTags; adoptFrom <- max(years[isFixed])
+      } else tag <- paste0("fixed mean of the hedge layers of ", paste(realM, collapse = ","))
       todo <- years[vapply(years, fixedOf, character(1)) != tag]
       if (dryRun) { for (y in todo) rows[[length(rows) + 1]] <- data.frame(scale = basename(d), year = y, action = "would fix", from = length(realM)); next }
       if (!length(todo)) next
+      if (adopt) { meanH <- terra::rast(f(adoptFrom))[["hedges"]]; names(meanH) <- "hedges" } else {      # adopt: the fixed layer of the newest file that carries it (already resampled and rim-repaired on its grid)
       lay <- lapply(realM, function(y) terra::rast(f(y))[["hedges"]]); g <- lay[[1]]
       lay <- lapply(lay, function(l) if (isTRUE(terra::compareGeom(l, g, stopOnError = FALSE))) l else terra::resample(l, g, method = "bilinear"))
-      meanH <- terra::mean(terra::rast(lay), na.rm = TRUE); names(meanH) <- "hedges"; rm(lay); invisible(gc())
+      meanH <- terra::mean(terra::rast(lay), na.rm = TRUE); names(meanH) <- "hedges"; rm(lay); invisible(gc()) }
       for (y in todo) {
         r <- terra::rast(f(y)); mh <- terra::resample(meanH, r[[1]], method = "bilinear"); names(mh) <- "hedges"
         out <- terra::rast(lapply(names(r), function(n) if (n == "hedges") mh else r[[n]])); names(out) <- names(r)
@@ -58,7 +69,7 @@ completeHedges <- function(processedRoot, landuseYears, habitatResolutions, land
         rm(r, out, mh); invisible(gc())
         file.remove(f(y)); file.rename(part, f(y)); sf <- paste0(f(y), ".studyarea"); if (file.exists(sf)) file.remove(sf)
         writeLines(tag, paste0(f(y), ".hedgesfixed"))
-        message("hedges ", basename(d), " ", y, ": fixed layer (mean of ", paste(realM, collapse = ","), ")")
+        message("hedges ", basename(d), " ", y, if (adopt) paste0(": adopted the existing fixed layer of ", adoptFrom, " (", tag, ")") else paste0(": fixed layer (mean of ", paste(realM, collapse = ","), ")"))
         rows[[length(rows) + 1]] <- data.frame(scale = basename(d), year = y, action = "fixed mean", from = length(realM))
       }
       next
