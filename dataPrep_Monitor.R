@@ -167,6 +167,9 @@ defineModule(sim, list(
     defineParameter("ddaVisitsXlsxSubpath", "character",
                     "response/raw/territories/BirdStats_Visits2005-2024D.xlsx", NA, NA,
                     "Path (relative to inputPath(sim)) to the DDA visited-routes xlsx."),
+    defineParameter("ddaTerritoriesNewSubpath", "character", NA_character_, NA, NA,
+                    "Path (relative to inputPath(sim)) to the NEW DDA territory export (territories_cbbm.csv, 2025-2026, 10 species), appended to the two xlsx tables",
+                    "(2026-11-26). NA = not used (the old behaviour)."),
 
     ## CORINE Land Cover (CLMS API) ----------------------------------------------------
     defineParameter("clmsTokenJSONPath", "character", "clms_token.json", NA, NA,
@@ -473,6 +476,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           mhbObsPath = file.path(inputPath(sim), P(sim)$mhbObsSubpath),
           ddaTerritoriesXlsxPath = file.path(inputPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
           ddaVisitsXlsxPath = file.path(inputPath(sim), P(sim)$ddaVisitsXlsxSubpath),
+          ddaTerritoriesNewPath = if (is.na(P(sim)$ddaTerritoriesNewSubpath)) NULL else file.path(inputPath(sim), P(sim)$ddaTerritoriesNewSubpath),
           probeflaechenShpPath = file.path(inputPath(sim), P(sim)$probeflaechenShpSubpath),
           processedRoot = file.path(inputPath(sim), "predictors", "processed"),
           resolutionConfig = P(sim)$resolutionConfig,

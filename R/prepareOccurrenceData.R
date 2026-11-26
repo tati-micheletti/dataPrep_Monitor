@@ -82,7 +82,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
                                    perSpeciesThinDist = NULL, brutzeitcodeFilter = NULL,
                                    perSpeciesDataSource = NULL, germanNames,
                                    studyArea = NULL, recordsBufferM = 1000, speciesPredictorTable = NULL,
-                                   speciesNameAliases = NULL, cachePath = NULL) {
+                                   speciesNameAliases = NULL, cachePath = NULL, ddaTerritoriesNewPath = NULL) {
 
   extractScale <- function(nested, scale) {
     if (is.null(nested)) return(NULL)
@@ -137,6 +137,7 @@ prepareOccurrenceData <- function(ebba2CSVPath, ebba2ShpPath, bioclimFile,
     mhbObsPath = mhbObsPath,
     perSpeciesDataSource = perSpeciesDataSource,
     germanNames = germanNames,
+    ddaTerritoriesNewPath = ddaTerritoriesNewPath,      # 2026-11-26: NULL = only the two old xlsx tables; else the new territory export is appended (readDdaTerritoriesNew())
     brutzeitcodeFilter = extractScale(brutzeitcodeFilter, "landscape"),
     studyArea = studyArea, recordsBufferM = recordsBufferM,
     speciesPredictors = extractScale(speciesPredictorTable, "landscape"),

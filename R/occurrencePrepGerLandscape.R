@@ -124,7 +124,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
                                         brutzeitcodeFilter = NULL, studyArea = NULL, recordsBufferM = 1000,
-                                        speciesPredictors = NULL, cachePath = NULL) {
+                                        speciesPredictors = NULL, cachePath = NULL, ddaTerritoriesNewPath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -184,6 +184,17 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     message("Loading DDA visited routes data...")
     visits <- readxl::read_xlsx(ddaVisitsXlsxPath)
 
+    # 2026-11-26: the NEW DDA territory export (territories_cbbm.csv, validated 2025-2026 territories of 10 species) is appended to the two old tables, in their format (readDdaTerritoriesNew()).
+    # NULL (default) = nothing changes. The visits of the new seasons are a proxy (route-years with a territory of any of the 10 species), see there.
+    newDda <- NULL; lastOldDda <- max(as.integer(format(territories$Countdate, "%Y")), na.rm = TRUE)
+    if (!is.null(ddaTerritoriesNewPath) && !is.na(ddaTerritoriesNewPath) && nzchar(ddaTerritoriesNewPath)) {
+      newDda <- readDdaTerritoriesNew(ddaTerritoriesNewPath, germanNames = germanNames, lastOldYear = lastOldDda)
+      message("New DDA territories: seasons ", paste(newDda$years, collapse = ", "), "; ", nrow(newDda$territories), " route x species x season rows, ", nrow(newDda$visits),
+              " route-years (proxy for the surveyed list); species with data: ", paste(newDda$speciesCovered, collapse = ", "))
+      territories <- dplyr::bind_rows(territories, newDda$territories)
+      visits <- dplyr::bind_rows(visits, newDda$visits)
+    }
+
     message("Cleaning DDA data...")
     territories <- territories |>
       dplyr::mutate(species = foldGermanUmlauts(enc2utf8(`Art deutsch`)),
@@ -215,6 +226,13 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                      Reviere = ifelse(Reviere == -1, NA, Reviere)) |>             # no count exists: NA, so that nothing uses -1 as a number of territories
       dplyr::left_join(lookup, by = c("species" = "german")) |>
       dplyr::rename(latin_name = latin, german_name = species)
+
+    if (!is.null(newDda)) {      # a species WITHOUT new territories must not get the new route-years as absences (every zero would be false): its data ends with the old tables
+      noNew <- setdiff(ddaRoutedSpecies, newDda$speciesCovered)
+      dropRows <- allCombos$latin_name %in% noNew & as.integer(allCombos$Jahr) > lastOldDda
+      if (any(dropRows)) message("New DDA territories: ", sum(dropRows), " route-years of the new seasons removed for species without new territories (", paste(intersect(noNew, unique(allCombos$latin_name[dropRows])), collapse = ", "), ")")
+      allCombos <- allCombos[!dropRows, , drop = FALSE]
+    }
 
     occSpatial <- allCombos |>
       dplyr::inner_join(probeflaechen |>
