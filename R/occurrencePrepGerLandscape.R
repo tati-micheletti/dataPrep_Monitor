@@ -124,7 +124,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
                                         brutzeitcodeFilter = NULL, studyArea = NULL, recordsBufferM = 1000,
-                                        speciesPredictors = NULL, cachePath = NULL, ddaTerritoriesNewPath = NULL) {
+                                        speciesPredictors = NULL, cachePath = NULL, ddaTerritoriesNewPath = NULL, ddaMinVisits = NA_integer_) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -188,7 +188,9 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
     # NULL (default) = nothing changes. The visits of the new seasons are a proxy (route-years with a territory of any of the 10 species), see there.
     newDda <- NULL; lastOldDda <- max(as.integer(format(territories$Countdate, "%Y")), na.rm = TRUE)
     if (!is.null(ddaTerritoriesNewPath) && !is.na(ddaTerritoriesNewPath) && nzchar(ddaTerritoriesNewPath)) {
-      newDda <- readDdaTerritoriesNew(ddaTerritoriesNewPath, germanNames = germanNames, lastOldYear = lastOldDda)
+      # 2026-11-27: with ddaMinVisits (4, MhB team) the surveyed list is the sample areas with that many CBBM visits (visits.csv etc. in the folder of the territory file); NA = the old proxy
+      newDda <- readDdaTerritoriesNew(ddaTerritoriesNewPath, germanNames = germanNames, lastOldYear = lastOldDda,
+                                      visitsDir = if (is.na(ddaMinVisits)) NULL else dirname(ddaTerritoriesNewPath), minVisits = ddaMinVisits)
       message("New DDA territories: seasons ", paste(newDda$years, collapse = ", "), "; ", nrow(newDda$territories), " route x species x season rows, ", nrow(newDda$visits),
               " route-years (proxy for the surveyed list); species with data: ", paste(newDda$speciesCovered, collapse = ", "))
       territories <- dplyr::bind_rows(territories, newDda$territories)

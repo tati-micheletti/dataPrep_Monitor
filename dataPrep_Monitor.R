@@ -170,6 +170,9 @@ defineModule(sim, list(
     defineParameter("ddaTerritoriesNewSubpath", "character", NA_character_, NA, NA,
                     "Path (relative to inputPath(sim)) to the NEW DDA territory export (territories_cbbm.csv, 2025-2026, 10 species), appended to the two xlsx tables",
                     "(2026-11-26). NA = not used (the old behaviour)."),
+    defineParameter("ddaMinVisits", "integer", NA_integer_, NA, NA,
+                    "Minimum CBBM visits per sample area and season for the NEW seasons (MhB team, 2026-11-27: 4, because Autoterri only maps sample areas with all 4 visits). The surveyed list is read from",
+                    "visits.csv/survey_units.csv/sampleareas.csv in the folder of the new territory file. NA = the old proxy (route-years with a territory). Set by runMe.R from sharedDdaMinVisits."),
 
     ## CORINE Land Cover (CLMS API) ----------------------------------------------------
     defineParameter("clmsTokenJSONPath", "character", "clms_token.json", NA, NA,
@@ -477,6 +480,7 @@ doEvent.dataPrep_Monitor = function(sim, eventTime, eventType) {
           ddaTerritoriesXlsxPath = file.path(inputPath(sim), P(sim)$ddaTerritoriesXlsxSubpath),
           ddaVisitsXlsxPath = file.path(inputPath(sim), P(sim)$ddaVisitsXlsxSubpath),
           ddaTerritoriesNewPath = if (is.na(P(sim)$ddaTerritoriesNewSubpath)) NULL else file.path(inputPath(sim), P(sim)$ddaTerritoriesNewSubpath),
+          ddaMinVisits = as.integer(P(sim)$ddaMinVisits),
           probeflaechenShpPath = file.path(inputPath(sim), P(sim)$probeflaechenShpSubpath),
           processedRoot = file.path(inputPath(sim), "predictors", "processed"),
           resolutionConfig = P(sim)$resolutionConfig,
