@@ -73,7 +73,7 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
                                       thinDist = 400, perSpeciesThinDist = NULL,
                                       useThinning = TRUE, brutzeitcodeFilter = NULL,
                                       studyArea = NULL, recordsBufferM = 1000, speciesPredictors = NULL,
-                                      speciesNameAliases = NULL, cachePath = NULL) {
+                                      speciesNameAliases = NULL, cachePath = NULL, sampleAreasPath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -131,7 +131,8 @@ occurrencePrepGerHabitat <- function(mhbObsPath, probeflaechenShpPath,
   message("Years: ", paste(sort(unique(df$year)), collapse = ", "))
 
   message("\nLoading Probeflaechen shapefile...")
-  pf <- sf::st_read(probeflaechenShpPath, quiet = TRUE) |>
+  # 2026-11-27: sampleareas.csv first, the shapefile as fallback (readPlotPolygons()); NULL = the shapefile only, as before
+  pf <- readPlotPolygons(probeflaechenShpPath, sampleAreasPath) |>
     transformToLAEA() |>
     dplyr::rename(AREA_NATIONAL_CODE = SITE_ID) |>
     dplyr::mutate(AREA_NATIONAL_CODE = tolower(AREA_NATIONAL_CODE))

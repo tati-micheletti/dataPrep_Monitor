@@ -124,7 +124,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
                                         useThinning = TRUE, mhbObsPath = NULL,
                                         perSpeciesDataSource = NULL, germanNames,
                                         brutzeitcodeFilter = NULL, studyArea = NULL, recordsBufferM = 1000,
-                                        speciesPredictors = NULL, cachePath = NULL, ddaTerritoriesNewPath = NULL, ddaMinVisits = NA_integer_) {
+                                        speciesPredictors = NULL, cachePath = NULL, ddaTerritoriesNewPath = NULL, ddaMinVisits = NA_integer_,
+                                        sampleAreasPath = NULL) {
 
   if (is.null(cachePath)) cachePath <- file.path(tempdir(), "birdMonitor_cache")
 
@@ -161,7 +162,8 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
   }
 
   message("Loading Probeflaechen shapefile...")
-  probeflaechen <- sf::st_read(probeflaechenShpPath, quiet = TRUE)
+  # 2026-11-27: with sampleAreasPath (dbird sampleareas.csv) the plot locations come from it first, the shapefile is the fallback (readPlotPolygons()); NULL = the shapefile only, as before
+  probeflaechen <- readPlotPolygons(probeflaechenShpPath, sampleAreasPath)
   probeflaechen <- transformToLAEA(probeflaechen)
   coords <- laeaCoordinates(sf::st_centroid(probeflaechen), "Probeflaechen centroids (landscape)")
   probeflaechen$x <- coords[, 1]
