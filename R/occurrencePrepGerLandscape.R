@@ -192,7 +192,7 @@ occurrencePrepGerLandscape <- function(ddaTerritoriesXlsxPath, ddaVisitsXlsxPath
       newDda <- readDdaTerritoriesNew(ddaTerritoriesNewPath, germanNames = germanNames, lastOldYear = lastOldDda,
                                       visitsDir = if (is.na(ddaMinVisits)) NULL else dirname(ddaTerritoriesNewPath), minVisits = ddaMinVisits)
       message("New DDA territories: seasons ", paste(newDda$years, collapse = ", "), "; ", nrow(newDda$territories), " route x species x season rows, ", nrow(newDda$visits),
-              " route-years (proxy for the surveyed list); species with data: ", paste(newDda$speciesCovered, collapse = ", "))
+              " route-years (surveyed list: ", if (is.na(ddaMinVisits)) "PROXY, route-years with a territory" else paste0("sample areas with >= ", ddaMinVisits, " CBBM visits"), "); species with data: ", paste(newDda$speciesCovered, collapse = ", "))
       territories <- dplyr::bind_rows(territories, newDda$territories)
       visits <- dplyr::bind_rows(visits, newDda$visits)
     }
